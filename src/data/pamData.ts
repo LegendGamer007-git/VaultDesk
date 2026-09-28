@@ -1,0 +1,1363 @@
+import {
+  ErrorEntry,
+  UpdateRelease,
+  SecurityAdvisory,
+  MarketplaceItem,
+  CommunityThread
+} from '../types';
+
+export const INITIAL_ERRORS: ErrorEntry[] = [
+  {
+    id: 'err-pcld001e',
+    code: 'PCLD001E',
+    title: 'Privilege Cloud Secure Tunnel connection failed',
+    component: 'Privilege Cloud',
+    severity: 'Critical',
+    description: 'On-premises customer connector cannot establish or maintain an outbound micro-tunnel to the CyberArk Privilege Cloud SaaS tenant. As a result, safe synchronization and automated password management are suspended.',
+    cause: 'Outbound TCP port 443 blocked on edge corporate firewall, TLS deep packet inspection (DPI) or SSL proxy intercepting pinned certificate, or CyberArk Secure Tunnel service crashed on the Connector host.',
+    resolutionSteps: [
+      'Confirm outbound network path to <subdomain>.privilegecloud.cyberark.cloud on port 443 using Test-NetConnection in PowerShell.',
+      'Ensure corporate proxy or next-gen firewall bypasses SSL/TLS interception for *.cyberark.cloud and *.privilegecloud.cyberark.cloud.',
+      'Open services.msc on the Privilege Cloud Connector host and check the status of the "CyberArk Secure Tunnel" service.',
+      'Review C:\\Program Files\\CyberArk\\Secure Tunnel\\logs\\SecureTunnel.log for handshake errors or HTTP 407 proxy authentication failures.',
+      'Restart the Secure Tunnel service and confirm active tunnel establishment in ISPSS Connector Management portal.'
+    ],
+    affectedVersions: ['Privilege Cloud Standard', 'Privilege Cloud with ISPSS (2024-2026)'],
+    logsToCheck: [
+      'C:\\Program Files\\CyberArk\\Secure Tunnel\\logs\\SecureTunnel.log',
+      'C:\\Program Files\\CyberArk\\Connector Management Agent\\logs\\agent.log'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: Privilege Cloud Secure Tunnel Architecture & Ports',
+        url: 'https://docs.cyberark.com/privilege-cloud/latest/en/content/securetunnel/secure-tunnel-troubleshooting.htm',
+        type: 'Official Docs'
+      }
+    ],
+    tags: ['privilege-cloud', 'secure-tunnel', 'ispss', 'connector', 'network'],
+    lastUpdated: '2026-09-18',
+    helpfulCount: 294,
+    unhelpfulCount: 4,
+    verifiedByCommunity: true,
+    views30d: 3410,
+    bookmarks30d: 220,
+    views60d: 6100,
+    bookmarks60d: 410,
+    trendVelocity: '+29%',
+    trendDirection: 'up',
+    trendVelocity60d: '+44%',
+    trendDirection60d: 'up',
+    weeklyActivity: [790, 840, 890, 890]
+  },
+  {
+    id: 'err-pcld004e',
+    code: 'PCLD004E',
+    title: 'Privilege Cloud Connector Management Agent offline or token expired',
+    component: 'Privilege Cloud',
+    severity: 'High',
+    description: 'The Connector Management Agent on the customer connector server failed to register with CyberArk Identity Security Platform Shared Services (ISPSS) due to an expired bootstrap token.',
+    cause: 'The deployment script was executed after the 24-hour token validity window expired, or the agent cryptographic cache in C:\\Program Files\\CyberArk\\Connector Management Agent was corrupted.',
+    resolutionSteps: [
+      'Log into the CyberArk ISPSS Portal as an Administrator and navigate to Administration > Connector Management.',
+      'Click "Add Connector" and generate a fresh registration command and token.',
+      'Open an elevated PowerShell prompt on the connector host and execute the fresh registration command.',
+      'Inspect C:\\Program Files\\CyberArk\\Connector Management Agent\\logs\\agent.log to confirm successful registration code 200.',
+      'Verify that the connector displays "Active" and "Connected" in the cloud console.'
+    ],
+    affectedVersions: ['Privilege Cloud 13.x', 'Privilege Cloud 14.x ISPSS'],
+    logsToCheck: [
+      'C:\\Program Files\\CyberArk\\Connector Management Agent\\logs\\agent.log'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Community KB: Connector Management Agent Token Expired Resolution',
+        url: 'https://community.cyberark.com/s/article/Privilege-Cloud-Connector-Management-Token-Renewal',
+        type: 'KB Article'
+      }
+    ],
+    tags: ['privilege-cloud', 'connector-management', 'token-expired', 'ispss'],
+    lastUpdated: '2026-09-15',
+    helpfulCount: 185,
+    unhelpfulCount: 2,
+    verifiedByCommunity: true,
+    views30d: 2950,
+    bookmarks30d: 185,
+    views60d: 5200,
+    bookmarks60d: 330,
+    trendVelocity: '+22%',
+    trendDirection: 'up',
+    trendVelocity60d: '+35%',
+    trendDirection60d: 'up',
+    weeklyActivity: [690, 720, 760, 780]
+  },
+  {
+    id: 'err-itats006e',
+    code: 'ITATS006E',
+    title: 'Station is not authenticated to the Vault',
+    component: 'Vault',
+    severity: 'Critical',
+    description: 'A component (PVWA, CPM, PSM, or AAM agent) attempted to communicate with the CyberArk Digital Vault, but the Vault rejected the credential file (credfile) or station identity.',
+    cause: 'The component credential file (user.ini, app.cred, etc.) is corrupted, out of sync with the Vault-stored credential, has expired, or the machine IP / hostname hash restriction in the credfile does not match the requesting server.',
+    resolutionSteps: [
+      'Identify which component triggered the error by reviewing the Vault Server console/itaso001.log or the component local log.',
+      'Stop the affected component service (e.g., CyberArk Password Manager or CyberArk Privileged Session Manager service).',
+      'Navigate to the component installation directory (e.g., C:\\Program Files (x86)\\CyberArk\\Password Manager\\Vault).',
+      'Use the CreateCredFile utility to generate a fresh credential file: CreateCredFile.exe user.ini Password /IP /Host (or specify appropriate flags).',
+      'Reset the corresponding component user password in the PrivateArk Client or PVWA (e.g., PasswordManager or PSMApp_ServerName).',
+      'Replace the existing .ini/.cred file with the newly generated credfile and ensure appropriate file permissions (read-only by component service account).',
+      'Start the component service and inspect log files to confirm authentication succeeded.'
+    ],
+    affectedVersions: ['11.7', '12.2', '12.6 LTS', '13.0', '13.2', '14.0 LTS', '14.2'],
+    logsToCheck: [
+      'Vault: Server\\itaso001.log',
+      'CPM: Password Manager\\Logs\\pm_error.log',
+      'PSM: PSM\\Logs\\PSMConsole.log',
+      'PVWA: CyberArk\\Password Vault Web Access\\Services\\Logs\\CyberArk.WebConsole.log'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: CreateCredFile Utility Reference',
+        url: 'https://docs.cyberark.com/pam-self-hosted/latest/en/content/pasimp/createcredfile-utility.htm',
+        type: 'Official Docs'
+      },
+      {
+        title: 'CyberArk Community KB: How to reset component credentials after ITATS006E',
+        url: 'https://community.cyberark.com/s/article/How-to-reset-component-credfile',
+        type: 'KB Article'
+      }
+    ],
+    tags: ['authentication', 'credfile', 'createcredfiles', 'vault', 'connectivity'],
+    lastUpdated: '2026-08-14',
+    helpfulCount: 142,
+    unhelpfulCount: 3,
+    verifiedByCommunity: true,
+    views30d: 2890,
+    bookmarks30d: 194,
+    views60d: 5410,
+    bookmarks60d: 362,
+    trendVelocity: '+18%',
+    trendDirection: 'up',
+    trendVelocity60d: '+31%',
+    trendDirection60d: 'up',
+    weeklyActivity: [680, 710, 740, 760]
+  },
+  {
+    id: 'err-cacpm406e',
+    code: 'CACPM406E',
+    title: 'Error in execution of plugin. Execution timed out',
+    component: 'CPM',
+    severity: 'High',
+    description: 'The Central Policy Manager (CPM) plugin initiated a verify, change, or reconcile action on a target system, but the process exceeded the configured Timeout value.',
+    cause: 'Network firewall blocking port to target system, slow target host response, prompt regex mismatch in Process/Prompts file causing the script to hang waiting for an expected string, or DNS resolution latency on CPM server.',
+    resolutionSteps: [
+      'Open the safe where the target account resides in PVWA and check the platform configuration Settings > Additional Policy Settings.',
+      'Check the Execution Timeout parameter (default 90 seconds); temporarily increase to 180s if the target system is over high-latency WAN.',
+      'Verify network reachability from the CPM server to the target address on the target management port (e.g., Test-NetConnection -ComputerName <TargetIP> -Port 22/3389/1521).',
+      'Enable CPM debug logging in Administration > Platform Management > Edit Platform > Automatic Password Management > Additional Policy Settings (set Debug=Yes).',
+      'Trigger a Manual Verify on the account and check C:\\Program Files (x86)\\CyberArk\\Password Manager\\Logs\\pm_error.log and ThirdParty\\<SafeName>-<Account>.log.',
+      'Examine the third-party log to see which prompt the plugin got stuck on (e.g. unexpected banner, sudo prompt, or SSH cipher mismatch).'
+    ],
+    affectedVersions: ['12.2', '12.6', '13.0', '13.2', '14.0', '14.2'],
+    logsToCheck: [
+      'CPM: Password Manager\\Logs\\pm_error.log',
+      'CPM: Password Manager\\Logs\\ThirdParty\\<Safe>-<Account>-Check.log'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: CPM Plugin Development and Troubleshooting',
+        url: 'https://docs.cyberark.com/pam-self-hosted/latest/en/content/plugins/plugin-troubleshooting.htm',
+        type: 'Official Docs'
+      },
+      {
+        title: 'CyberArk Community: Debugging CACPM406E Plugin Timeouts',
+        url: 'https://community.cyberark.com/s/article/CACPM406E-Plugin-Timeout-Resolution',
+        type: 'Community'
+      }
+    ],
+    tags: ['cpm', 'plugin', 'timeout', 'network', 'firewall', 'regex'],
+    lastUpdated: '2026-07-29',
+    helpfulCount: 98,
+    unhelpfulCount: 2,
+    verifiedByCommunity: true,
+    views30d: 1840,
+    bookmarks30d: 116,
+    trendVelocity: '+9%',
+    trendDirection: 'steady',
+    weeklyActivity: [430, 460, 470, 480]
+  },
+  {
+    id: 'err-psmsr126e',
+    code: 'PSMSR126E',
+    title: 'Failed to successfully logon to the remote host',
+    component: 'PSM',
+    severity: 'High',
+    description: 'Privileged Session Manager (PSM) launched the proxy session, but the dispatcher was unable to establish an authenticated connection to the destination host.',
+    cause: 'Target server is unreachable via RDP/SSH, target account credentials stored in the Vault are invalid/expired, NLA (Network Level Authentication) policy mismatch, or Windows Remote Desktop Services User Logon Hours / Workstation restriction enforced.',
+    resolutionSteps: [
+      'Verify if the password stored in CyberArk for the target account is currently synchronized by running a CPM Verify operation first.',
+      'Test direct RDP connectivity from the PSM server to the target IP using mstsc.exe to isolate firewall vs. credential issues.',
+      'If connecting to Windows target with NLA enabled, ensure PSM server local group policy or Platform parameter "EnableNLA" is configured properly.',
+      'Inspect C:\\Program Files (x86)\\CyberArk\\PSM\\Logs\\PSMTrace.log and look for the specific session ID reported in the error message.',
+      'Verify the PSMConnect and PSMGw user accounts on the PSM server have appropriate "Log on locally" and "Allow log on through Remote Desktop Services" user rights assignment.'
+    ],
+    affectedVersions: ['12.0', '12.2', '12.6', '13.0', '13.2', '14.0'],
+    logsToCheck: [
+      'PSM: PSM\\Logs\\PSMTrace.log',
+      'PSM: PSM\\Logs\\Components\\<SessionID>.log',
+      'Target: Windows Event Viewer > Security Log (Event 4625)'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: PSM Error Codes and Session Logging',
+        url: 'https://docs.cyberark.com/pam-self-hosted/latest/en/content/psm/psm_troubleshooting.htm',
+        type: 'Official Docs'
+      }
+    ],
+    tags: ['psm', 'rdp', 'nla', 'remote-logon', 'dispatcher'],
+    lastUpdated: '2026-09-02',
+    helpfulCount: 115,
+    unhelpfulCount: 5,
+    verifiedByCommunity: true,
+    views30d: 1620,
+    bookmarks30d: 108,
+    trendVelocity: '+12%',
+    trendDirection: 'up',
+    weeklyActivity: [380, 400, 410, 430]
+  },
+  {
+    id: 'err-psmsr280e',
+    code: 'PSMSR280E',
+    title: 'Session ended unexpectedly with return code [3221225786] or [3221225477]',
+    component: 'PSM',
+    severity: 'Critical',
+    description: 'The connection dispatcher process (e.g., PSM-SSH, PSM-WinSCP, PSM-Toad, or Web Dispatcher) abruptly crashed or was terminated by Windows OS security mechanisms.',
+    cause: 'Windows AppLocker is blocking the third-party client executable or DLL, Windows DEP (Data Execution Prevention) terminated the process, or the target executable version does not match the AppLocker XML rules.',
+    resolutionSteps: [
+      'Convert the hex return code: 3221225786 corresponds to 0xC000013A (STATUS_CONTROL_C_EXIT) or 3221225477 corresponds to 0xC0000005 (STATUS_ACCESS_VIOLATION).',
+      'Check Windows Event Viewer on the PSM server: Applications and Services Logs > Microsoft > Windows > AppLocker > EXE and DLL.',
+      'If AppLocker blocked the application, open C:\\Program Files (x86)\\CyberArk\\PSM\\Hardening\\PSMConfigureAppLocker.xml.',
+      'Add the executable path, hash, or publisher rule to the AppLocker configuration script.',
+      'Run PowerShell as Administrator and execute .\\PSMConfigureAppLocker.ps1 to refresh the AppLocker security policy.',
+      'Check if Windows DEP is configured to "Turn on DEP for all programs and services except those I select" and whitelist the dispatcher if necessary.'
+    ],
+    affectedVersions: ['12.2', '12.6', '13.0', '13.2', '14.0', '14.2'],
+    logsToCheck: [
+      'PSM: Windows Event Log > Microsoft-Windows-AppLocker/EXE and DLL',
+      'PSM: PSM\\Logs\\PSMTrace.log',
+      'PSM: PSM\\Logs\\Components\\<SessionID>.log'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: Run the AppLocker Hardening Script',
+        url: 'https://docs.cyberark.com/pam-self-hosted/latest/en/content/psm/psm_configureapplocker.htm',
+        type: 'Official Docs'
+      },
+      {
+        title: 'CyberArk Community: Resolving PSMSR280E 3221225786 Dispatcher Termination',
+        url: 'https://community.cyberark.com/s/article/PSMSR280E-AppLocker-Troubleshooting',
+        type: 'KB Article'
+      }
+    ],
+    tags: ['psm', 'applocker', 'hardening', 'dispatcher-crash', 'dep'],
+    lastUpdated: '2026-08-20',
+    helpfulCount: 167,
+    unhelpfulCount: 4,
+    verifiedByCommunity: true,
+    views30d: 2410,
+    bookmarks30d: 172,
+    trendVelocity: '+22%',
+    trendDirection: 'up',
+    weeklyActivity: [510, 590, 640, 670]
+  },
+  {
+    id: 'err-cacpm250e',
+    code: 'CACPM250E',
+    title: 'Failed to verify password for user on address. RC=2148074252',
+    component: 'CPM',
+    severity: 'Medium',
+    description: 'CPM attempted to verify the credentials of an Active Directory or Windows account, but Windows LSA / Kerberos returned standard error code 2148074252 (0x8009030C).',
+    cause: 'Error 0x8009030C translates to SEC_E_LOGON_DENIED (bad password or username mismatch). The password in the Vault does not match the actual target system password, or account is disabled/locked.',
+    resolutionSteps: [
+      'Verify if the account in Active Directory / Target is locked out using Active Directory Users and Computers (ADUC) or Get-ADUser.',
+      'If the account is not locked, the password stored in CyberArk has fallen out of sync with the endpoint.',
+      'Initiate a Reconcile operation in PVWA instead of a Verify operation: CPM will use the associated reconcile account to reset the target password to a new known value.',
+      'If Reconcile is not configured, manually reset the password on the domain controller/target, then use "Change only in the Vault" (safe reset) in PVWA to input the matching secret.',
+      'Confirm the CPM service user has network connectivity to Kerberos port 88 and LDAP port 389/636 on the Domain Controller.'
+    ],
+    affectedVersions: ['11.x', '12.x', '13.x', '14.x'],
+    logsToCheck: [
+      'CPM: Password Manager\\Logs\\pm_error.log',
+      'Target Domain Controller: Security Event ID 4740 (Lockout) and 4625 (Logon Failure)'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: Automatic Password Management and Reconciliation',
+        url: 'https://docs.cyberark.com/pam-self-hosted/latest/en/content/pasimp/automatic-password-management.htm',
+        type: 'Official Docs'
+      }
+    ],
+    tags: ['cpm', 'windows', 'active-directory', 'reconcile', 'lockout'],
+    lastUpdated: '2026-07-15',
+    helpfulCount: 84,
+    unhelpfulCount: 1,
+    verifiedByCommunity: true,
+    views30d: 1180,
+    bookmarks30d: 82,
+    trendVelocity: '-4%',
+    trendDirection: 'down',
+    weeklyActivity: [320, 310, 280, 270]
+  },
+  {
+    id: 'err-psmsr945e',
+    code: 'PSMSR945E',
+    title: 'Failed to launch web application dispatcher: ChromeDriver version mismatch',
+    component: 'PSM',
+    severity: 'High',
+    description: 'When initiating a web-based connection component (AWS Console, Azure Portal, vCenter Web, etc.), PSM fails to initialize the browser automation session.',
+    cause: 'Google Chrome or Microsoft Edge auto-updated on the PSM server, but the corresponding chromedriver.exe / msedgedriver.exe inside the PSM Components directory was not updated, resulting in WebDriver version incompatibility.',
+    resolutionSteps: [
+      'Log on to the PSM server and check the exact installed version of Google Chrome (Help > About Google Chrome) or Edge.',
+      'Navigate to C:\\Program Files (x86)\\CyberArk\\PSM\\Components and inspect chromedriver.exe version by running: .\\chromedriver.exe --version.',
+      'Download the matching ChromeDriver / EdgeDriver binary corresponding to your browser major version.',
+      'Unblock the downloaded executable (Properties > Unblock) and copy it into the C:\\Program Files (x86)\\CyberArk\\PSM\\Components directory.',
+      'Re-run C:\\Program Files (x86)\\CyberArk\\PSM\\Hardening\\PSMConfigureAppLocker.ps1 if AppLocker enforces hash-based rules.',
+      'Best practice: Disable automatic Chrome updates on PSM servers via GPO (Computer Configuration > Administrative Templates > Google Update) to prevent unexpected driver drift.'
+    ],
+    affectedVersions: ['12.2', '12.6', '13.0', '13.2', '14.0', '14.2'],
+    logsToCheck: [
+      'PSM: PSM\\Logs\\Components\\<SessionID>.log',
+      'PSM: PSM\\Logs\\PSMTrace.log'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Community: Chrome Auto-update and PSM Web Dispatcher Mismatch',
+        url: 'https://community.cyberark.com/s/article/PSM-ChromeDriver-Version-Mismatch-Resolution',
+        type: 'Community'
+      }
+    ],
+    tags: ['psm', 'web-dispatcher', 'chromedriver', 'browser-automation', 'applocker'],
+    lastUpdated: '2026-09-10',
+    helpfulCount: 204,
+    unhelpfulCount: 6,
+    verifiedByCommunity: true,
+    views30d: 3420,
+    bookmarks30d: 218,
+    trendVelocity: '+34%',
+    trendDirection: 'up',
+    weeklyActivity: [620, 810, 940, 1050]
+  },
+  {
+    id: 'err-appap306e',
+    code: 'APPAP306E',
+    title: 'Agent initialization failed: Station is not authenticated to the Vault',
+    component: 'CCP',
+    severity: 'High',
+    description: 'The Central Credential Provider (CCP) / Application Access Manager (AAM) provider web service or local agent failed to initialize its Vault connection during API request handling.',
+    cause: 'The Application Provider credential file appprovideruser.cred is invalid or expired, or the IIS Application Pool running the AIMWebService lacks NTFS read permissions to the credfile location.',
+    resolutionSteps: [
+      'Open IIS Manager on the CCP server and check the Application Pool for AIMWebService (default name: AIMWebServiceAppPool).',
+      'Verify the user identity of the Application Pool and verify that this identity has Read and Execute permissions on C:\\Program Files (x86)\\CyberArk\\ApplicationPasswordProvider\\Vault.',
+      'Stop IIS (iisreset /stop).',
+      'Re-create the provider credential file using CreateCredFile.exe appprovideruser.cred Password /IP /Host.',
+      'Synchronize the AppProviderUser in PrivateArk Client or PVWA.',
+      'Start IIS (iisreset /start) and issue a test HTTP GET request to http://localhost/AIMWebService/api/Accounts?AppID=TestApp&Safe=TestSafe.'
+    ],
+    affectedVersions: ['12.2', '12.6', '13.0', '13.2', '14.0'],
+    logsToCheck: [
+      'CCP: ApplicationPasswordProvider\\Logs\\appconsole.log',
+      'CCP: ApplicationPasswordProvider\\Logs\\apptrace.log',
+      'IIS: C:\\inetpub\\logs\\LogFiles\\W3SVC1'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: Central Credential Provider Implementation Guide',
+        url: 'https://docs.cyberark.com/aam-credential-providers/latest/en/content/ccp/ccp_troubleshooting.htm',
+        type: 'Official Docs'
+      }
+    ],
+    tags: ['ccp', 'aam', 'aimwebservice', 'iis', 'devops', 'api'],
+    lastUpdated: '2026-08-01',
+    helpfulCount: 77,
+    unhelpfulCount: 2,
+    verifiedByCommunity: true,
+    views30d: 950,
+    bookmarks30d: 67,
+    trendVelocity: '+6%',
+    trendDirection: 'steady',
+    weeklyActivity: [220, 230, 240, 260]
+  },
+  {
+    id: 'err-itats433e',
+    code: 'ITATS433E',
+    title: 'Invalid Session ID / User session lost',
+    component: 'PVWA',
+    severity: 'Medium',
+    description: 'Users in the Password Vault Web Access (PVWA) console suddenly get logged out with "Session Expired" or "Invalid Session ID" during safe browsing or account modifications.',
+    cause: 'PVWA is deployed behind a Load Balancer (F5, NetScaler, AWS ALB) without sticky sessions (persistence) enabled, or the Vault session timeout is shorter than the IIS application pool idle timeout.',
+    resolutionSteps: [
+      'Ensure the Load Balancer persistence method is set to Source IP Affinity or HTTP Cookie-based Sticky Session with duration at least 30 minutes.',
+      'Check IIS Application Pool recycle settings on all PVWA nodes: disable fixed recycling intervals during business hours.',
+      'In PVWA Administration > Options > General, verify the SessionTimeout value matches across all web tiers.',
+      'Review CyberArk.WebConsole.log on the PVWA node to see if the session was purged due to concurrent connection limit or Vault timeout.'
+    ],
+    affectedVersions: ['12.2', '12.6', '13.0', '13.2', '14.0', '14.2'],
+    logsToCheck: [
+      'PVWA: CyberArk\\Password Vault Web Access\\Services\\Logs\\CyberArk.WebConsole.log',
+      'Load Balancer: Access / Connection state table logs'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: Load Balancing Multiple PVWA Servers',
+        url: 'https://docs.cyberark.com/pam-self-hosted/latest/en/content/pasimp/load-balancing-pvwa.htm',
+        type: 'Official Docs'
+      }
+    ],
+    tags: ['pvwa', 'load-balancer', 'session-timeout', 'iis', 'sticky-session'],
+    lastUpdated: '2026-06-18',
+    helpfulCount: 63,
+    unhelpfulCount: 1,
+    verifiedByCommunity: true,
+    views30d: 820,
+    bookmarks30d: 54,
+    trendVelocity: '-2%',
+    trendDirection: 'steady',
+    weeklyActivity: [210, 210, 200, 200]
+  },
+  {
+    id: 'err-pta0001e',
+    code: 'PTA0001E',
+    title: 'Unable to connect to PTA Diamond server or Vault forwarding dropped',
+    component: 'PTA',
+    severity: 'High',
+    description: 'The Privileged Threat Analytics (PTA) engine is not receiving telemetry from the Vault, or PVWA Security Events dashboard displays a disconnection warning.',
+    cause: 'Self-signed or CA certificate on PTA server expired, port 22443 / 514 syslog blocked between Vault and PTA server, or PTA Diamond background daemon crashed due to disk space exhaustion.',
+    resolutionSteps: [
+      'Log on to PTA Linux server as user pta / root.',
+      'Check PTA service status: service pta status or run the built-in diagnostic utility: /opt/pta/diagnostic/runDiagnostics.sh.',
+      'Verify free disk space on PTA partition: df -h (PTA halts ingestion if /opt partition exceeds 90% utilization).',
+      'Check certificate validity using OpenSSL: openssl x509 -in /opt/pta/cert/pta.crt -text -noout.',
+      'Verify network connectivity from Vault server to PTA on TCP 22443 and UDP/TCP 514 (Syslog).'
+    ],
+    affectedVersions: ['12.6', '13.0', '13.2', '14.0'],
+    logsToCheck: [
+      'PTA: /opt/tomcat/logs/diamond.log',
+      'PTA: /opt/pta/service/service.log',
+      'Vault: Server\\itaso001.log'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: PTA Diagnostic Tool and Troubleshooting',
+        url: 'https://docs.cyberark.com/pam-self-hosted/latest/en/content/pta/troubleshooting-pta.htm',
+        type: 'Official Docs'
+      }
+    ],
+    tags: ['pta', 'threat-analytics', 'diamond-server', 'syslog', 'certificates'],
+    lastUpdated: '2026-07-04',
+    helpfulCount: 51,
+    unhelpfulCount: 0,
+    verifiedByCommunity: true,
+    views30d: 640,
+    bookmarks30d: 43,
+    trendVelocity: '+3%',
+    trendDirection: 'steady',
+    weeklyActivity: [150, 160, 160, 170]
+  },
+  {
+    id: 'err-conj001e',
+    code: 'CONJ001E',
+    title: 'Conjur Secrets Manager host authentication failure / 401 Unauthorized',
+    component: 'Conjur',
+    severity: 'High',
+    description: 'Workload or Kubernetes Conjur Follower daemon failed to authenticate against the Conjur Master/Leader cluster using Host API token or mTLS certificate.',
+    cause: 'The workload API key rotated unexpectedly, host policy annotation expired in root policy, or Kubernetes Conjur Authenticator sidecar service account token was rejected.',
+    resolutionSteps: [
+      'Verify host identity in Conjur CLI: conjur host show -i host/workloads/app-service.',
+      'Check Conjur Leader container audit log: docker logs conjur-leader | grep -i 401.',
+      'Re-authenticate or issue a fresh host API key using: conjur host rotate-api-key -i host/workloads/app-service.',
+      'For Kubernetes deployments, verify the ServiceAccount has proper RoleBinding to conjur-authenticator and Conjur ConfigMap specifies correct CONJUR_ACCOUNT.'
+    ],
+    affectedVersions: ['12.5', '13.0', '13.2', '14.0'],
+    logsToCheck: [
+      'Conjur Leader: /var/log/conjur/audit.log',
+      'K8s: kubectl logs -l app=conjur-authenticator'
+    ],
+    sourceLinks: [
+      {
+        title: 'CyberArk Docs: Conjur Secrets Manager Troubleshooting',
+        url: 'https://docs.cyberark.com/conjur-enterprise/latest/en/content/troubleshooting.htm',
+        type: 'Official Docs'
+      }
+    ],
+    tags: ['conjur', 'secrets-manager', 'authentication', 'api-key', 'k8s'],
+    lastUpdated: '2026-08-20',
+    helpfulCount: 68,
+    unhelpfulCount: 2,
+    verifiedByCommunity: true,
+    views30d: 580,
+    bookmarks30d: 38,
+    trendVelocity: '+5%',
+    trendDirection: 'steady',
+    weeklyActivity: [130, 140, 150, 160]
+  }
+];
+
+export const INITIAL_UPDATES: UpdateRelease[] = [
+  {
+    id: 'rel-privilege-cloud-15-0-3',
+    product: 'CyberArk Privilege Cloud',
+    version: '15.0.3',
+    releaseDate: '2026-09-18',
+    type: 'security',
+    deploymentType: 'Privilege Cloud',
+    isLatest: true,
+    summary: 'Official CyberArk Privilege Cloud & Connector Release 15.0.3. Delivers high-priority security resolutions for Security Bulletin CA26-17 in PSM, enhanced Secure Infrastructure Access (SIA) connector proxying, and automated ISPSS Connector Management health telemetry.',
+    breakingChanges: [
+      'PSM-AS400 and PSM-OS390 legacy connectors are deprecated in v15.0+; migration to Universal Connectors is mandatory.',
+      'Connector Management Agent v15.0.3 requires outbound HTTPS port 443 with TLS 1.3 connectivity to ISPSS tenant endpoints.',
+      'SIA proxy components require updating Secure Tunnel to version 3.2.0 or newer.'
+    ],
+    keyHighlights: [
+      'PSM Security Bulletin CA26-17 resolution across all Privilege Cloud tenant connector hosts.',
+      'Native Secure Infrastructure Access (SIA) protocol optimization with reduced latency.',
+      'Auto-healing Connector Management Agent: detects and restarts stalled dispatchers automatically.',
+      'Real-time ISPSS policy synchronization and multi-tenant credential cache protection.'
+    ],
+    sourceUrl: 'https://docs.cyberark.com/privilege-cloud-standard/latest/en/content/privilege%20cloud/privcloud-rns.htm',
+    upgradeImpact: 'Medium',
+    impactNotes: 'Privilege Cloud SaaS backend updated automatically by CyberArk. On-premise action: upgrade PSM and CPM connectors to v15.0.3 to apply Security Bulletin CA26-17.'
+  },
+  {
+    id: 'rel-self-hosted-15-2-0',
+    product: 'CyberArk PAM Self-Hosted',
+    version: '15.2.0',
+    releaseDate: '2026-08-28',
+    type: 'feature',
+    deploymentType: 'Self-Hosted',
+    isLatest: true,
+    lts: true,
+    summary: 'CyberArk PAM Self-Hosted Version 15.2 (Long-Term Support LTS). Delivers full Windows Server 2025 support across Vault, CPM, PVWA, and PSM, FIPS 140-3 cryptographic compliance, centralized SSH key lifecycle management in modern REST API v3, VMware vSphere 9 support, and OAuth 2.0 / Microsoft Entra ID authentication.',
+    breakingChanges: [
+      'Classic PVWA UI is permanently removed. All administrative bookmarks, legacy scripts, and custom screens must migrate to the modern PVWA workspace.',
+      'Vault listener enforces TLS 1.2 or TLS 1.3. TLS 1.0, 1.1, and legacy 3DES ciphers are strictly blocked.',
+      'Central Policy Manager (CPM) and PVWA require Microsoft .NET 8.0 Hosting Bundle on host servers.',
+      'PSM AppLocker configuration script (PSMConfigureAppLocker.ps1) must be re-executed for updated v15.2 dispatcher binaries.'
+    ],
+    keyHighlights: [
+      'Full Windows Server 2025 platform support for Digital Vault, DR Vault, CPM, PVWA, and PSM.',
+      'FIPS 140-3 Cryptographic Compliance support for federal and highly regulated enterprise deployments.',
+      'Centralized SSH Key Lifecycle Management in modern UI and REST API v3 with bulk rotation & history.',
+      'VMware vSphere 9 hypervisor compatibility for virtualized Vault appliances.',
+      'OAuth 2.0 & Microsoft Entra ID modern token authentication for REST API automation.'
+    ],
+    sourceUrl: 'https://docs.cyberark.com/pam-self-hosted/latest/en/content/release%20notes/rn-whatsnew.htm',
+    upgradeImpact: 'High',
+    impactNotes: 'LTS enterprise release. Requires staging .NET 8.0 on CPM/PVWA nodes, testing REST API automation against v3 endpoints, and validating PADR replication.'
+  },
+  {
+    id: 'rel-privilege-cloud-2026',
+    product: 'CyberArk Privilege Cloud',
+    version: 'ISPSS 2026.3',
+    releaseDate: '2026-09-12',
+    type: 'feature',
+    deploymentType: 'Privilege Cloud',
+    summary: 'Quarterly SaaS update introducing enhanced ISPSS Connector Management auto-healing, Secure Tunnel v3.2 with multi-tenant proxy fallback, and automated CPM health diagnostics.',
+    breakingChanges: [
+      'Privilege Cloud on-prem Connectors running versions older than 13.0 must update Secure Tunnel to maintain outbound connectivity.',
+    ],
+    keyHighlights: [
+      'Connector Management Auto-Healing: Automatically restarts stuck dispatchers without manual remote desktop access.',
+      'ISPSS Unified Console: Consolidated view of Secrets Hub, Identity Security, and Privilege Cloud safe policies.',
+      'Out-of-the-box Zero-Trust session isolation for AWS IAM Identity Center and Azure Portal.',
+    ],
+    sourceUrl: 'https://docs.cyberark.com/privilege-cloud-standard/latest/en/content/privilege%20cloud/privcloud-rns.htm',
+    upgradeImpact: 'Medium',
+    impactNotes: 'Cloud tenant backend is updated automatically by CyberArk. Customer action only required to verify on-prem Connector Management agent status.'
+  },
+  {
+    id: 'rel-14-2',
+    product: 'CyberArk PAM Self-Hosted',
+    version: '14.2.0',
+    releaseDate: '2026-07-22',
+    type: 'feature',
+    deploymentType: 'Self-Hosted',
+    summary: 'Major quarterly release introducing TLS 1.3 enforcement by default for Vault communication, modernized REST API v3 endpoints, and expanded support for Windows Server 2025.',
+    breakingChanges: [
+      'Classic PVWA UI is permanently deprecated and removed. All custom navigation links must use modern PVWA workspace.',
+      'TLS 1.0 and 1.1 strictly blocked at the Vault network listener. Clients older than v12.2 must be upgraded before upgrading the Vault.',
+      'Vault Central Policy Manager now requires .NET 8.0 Runtime on CPM host servers.'
+    ],
+    keyHighlights: [
+      'REST API v3: High-speed safe bulk onboarding API with 4x higher throughput.',
+      'Zero-Trust Session Isolation: PSM HTML5 Gateway WebSocket performance boost.',
+      'Automated CPM certificate renewal hooks for Cloud Vault deployments.'
+    ],
+    sourceUrl: 'https://docs.cyberark.com/pam-self-hosted/latest/en/content/release%20notes/rn-whatsnew.htm',
+    upgradeImpact: 'High',
+    impactNotes: 'Requires planning for .NET 8.0 runtime deployment across all CPM and PVWA servers. Verify all legacy API integrations before cutover.'
+  },
+  {
+    id: 'rel-14-0-lts',
+    product: 'CyberArk PAM Self-Hosted (LTS)',
+    version: '14.0.3 LTS',
+    releaseDate: '2026-05-18',
+    type: 'security',
+    summary: 'Long-Term Support (LTS) maintenance rollup containing cumulative security fixes, OpenSSL 3.3 library upgrades, and CPM Oracle 23ai plugin support.',
+    breakingChanges: [
+      'Default AppLocker hardening script updated with tightened DLL rules for Chromium based dispatchers.'
+    ],
+    keyHighlights: [
+      'OpenSSL 3.3 runtime synchronization across Vault and PSM binaries.',
+      'Support for Oracle Database 23ai password management out-of-the-box.',
+      'Enhanced audit trail redaction for credentials passed in command line arguments.'
+    ],
+    sourceUrl: 'https://docs.cyberark.com/privilege-cloud-shared-services/latest/en/content/privilege%20cloud/privcloud-whatsnew-rns-previous.htm',
+    upgradeImpact: 'Medium',
+    impactNotes: 'Safe in-place upgrade for existing 14.0.x deployments. Backup dbparm.ini and PSM AppLocker rules before applying.'
+  },
+  {
+    id: 'rel-13-2-patch',
+    product: 'Privileged Session Manager (PSM)',
+    version: '13.2.5 Patch',
+    releaseDate: '2026-03-10',
+    type: 'patch',
+    summary: 'Critical hotfix addressing high CPU utilization in PSMServer.exe during concurrent audio-channel RDP sessions.',
+    breakingChanges: [],
+    keyHighlights: [
+      'Optimized RDP graphics pipeline for high-DPI remote desktop sessions.',
+      'Fixed rare memory leak when closing SSH terminal proxy sessions via PSM-SSH.'
+    ],
+    sourceUrl: 'https://docs.cyberark.com/privilege-cloud-shared-services/latest/en/content/privilege%20cloud/privcloud-whatsnew-rns-previous.htm',
+    upgradeImpact: 'Low',
+    impactNotes: 'Requires restarting CyberArk Privileged Session Manager service on PSM nodes.'
+  }
+];
+
+export const INITIAL_ADVISORIES: SecurityAdvisory[] = [
+  {
+    id: 'adv-2026-004',
+    cveId: 'CVE-2026-2819',
+    product: 'CyberArk PVWA',
+    severity: 'High',
+    cvss: 8.4,
+    title: 'Improper Access Control in PVWA Bulk Account Export API',
+    description: 'An authenticated user with Safe Auditor permissions could manipulate URL parameters in the legacy export endpoint to view account metadata from unauthorized safes.',
+    remediation: 'Upgrade PVWA to version 14.2.0, 14.0.3 LTS, or apply hotfix patch HF-PVWA-2026-04 on version 13.2. Alternatively, disable legacy export in web.config.',
+    publishDate: '2026-08-05',
+    affectedVersions: ['13.0.0 - 13.2.4', '14.0.0 - 14.0.2'],
+    fixedInVersion: '14.0.3 LTS / 14.2.0',
+    officialUrl: 'https://www.cve.org/CVERecord?id=CVE-2026-2819'
+  },
+  {
+    id: 'adv-2026-002',
+    cveId: 'CVE-2026-1944',
+    product: 'CyberArk PSM (Privileged Session Manager)',
+    severity: 'Critical',
+    cvss: 9.1,
+    title: 'Arbitrary Code Execution in PSM HTML5 Gateway Guacamole Parser',
+    description: 'A flaw in the Guacamole audio stream processing module could allow a privileged attacker with active session credentials to trigger a heap overflow resulting in remote code execution on the gateway container.',
+    remediation: 'Deploy container image psm-html5-gateway:14.2.0 or apply patch package guacamole-cve-2026-1944.deb immediately on all HTML5 Gateway servers.',
+    publishDate: '2026-06-12',
+    affectedVersions: ['12.6.0 - 12.6.9', '13.0.0 - 13.2.3', '14.0.0 - 14.0.1'],
+    fixedInVersion: '14.0.2 / 14.2.0',
+    officialUrl: 'https://www.cve.org/CVERecord?id=CVE-2026-1944'
+  },
+  {
+    id: 'adv-2025-011',
+    cveId: 'CVE-2025-8832',
+    product: 'Central Policy Manager (CPM)',
+    severity: 'Medium',
+    cvss: 6.5,
+    title: 'Cleartext Credential Exposure in CPM Plugin Debug Log',
+    description: 'When debug logging was enabled for specific custom PowerShell-based plugins, password parameters could be recorded in cleartext inside ThirdParty log files.',
+    remediation: 'Upgrade CPM to 14.0+ and verify that the RedactPasswordInLogs parameter is set to Yes in platform settings.',
+    publishDate: '2025-11-20',
+    affectedVersions: ['12.2.0 - 13.2.0'],
+    fixedInVersion: '13.2.4 / 14.0.0',
+    officialUrl: 'https://www.cve.org/CVERecord?id=CVE-2025-8832'
+  }
+];
+
+export const INITIAL_MARKETPLACE: MarketplaceItem[] = [
+  {
+    id: 'mkt-privilege-cloud-connector',
+    name: 'Privilege Cloud Connector Installer & Management Utility',
+    category: 'Tools & Integrations',
+    description: 'Automated installer, health validator, and configuration utility for on-premises Privilege Cloud CPM and PSM Connectors connecting to CyberArk ISPSS.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/privilege-cloud-connector',
+    downloadUrl: 'https://marketplace.cyberark.com/details/privilege-cloud-connector',
+    protocolOrPlatform: 'PowerShell / HTTPS (Port 443)',
+    lastSynced: '2026-09-20',
+    verified: true,
+    version: '15.0.3',
+    compatibleWith: ['Privilege Cloud'],
+    rating: 4.9,
+    downloadCount: 3820,
+    targetSystems: ['Privilege Cloud', 'Windows Server 2022/2025', 'ISPSS']
+  },
+  {
+    id: 'mkt-secure-tunnel',
+    name: 'CyberArk Secure Tunnel Client for Privilege Cloud',
+    category: 'Tools & Integrations',
+    description: 'Establishes secure, outbound-only micro-tunnels from customer networks to CyberArk Privilege Cloud tenant for LDAP, SIEM, and target reachability.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/secure-tunnel',
+    downloadUrl: 'https://marketplace.cyberark.com/details/secure-tunnel',
+    protocolOrPlatform: 'TLS 1.3 / Port 443',
+    lastSynced: '2026-09-15',
+    verified: true,
+    version: '3.1.4',
+    compatibleWith: ['Privilege Cloud'],
+    rating: 4.8,
+    downloadCount: 4210,
+    targetSystems: ['Privilege Cloud', 'LDAP/AD', 'SIEM / Syslog']
+  },
+  {
+    id: 'mkt-aws-iam',
+    name: 'AWS IAM User and Access Key CPM Plugin',
+    category: 'CPM Plugins',
+    description: 'Automated verification, rotation, and reconciliation for Amazon Web Services (AWS) IAM Access Keys and console login passwords using AWS SDK v3.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/aws-iam-access-keys',
+    downloadUrl: 'https://marketplace.cyberark.com/details/aws-iam-access-keys',
+    protocolOrPlatform: 'REST API / AWS SDK',
+    lastSynced: '2026-08-15',
+    verified: true,
+    version: '2.4.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.9,
+    downloadCount: 8940,
+    targetSystems: ['AWS Cloud', 'IAM', 'Privilege Cloud', 'Cloud Security']
+  },
+  {
+    id: 'mkt-azure-sql',
+    name: 'Azure SQL Database & Managed Instance Plugin',
+    category: 'CPM Plugins',
+    description: 'Rotates SQL logins and Microsoft Entra ID (Azure AD) service principal database user credentials over TLS encrypted TDS protocol.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/azure-sql-database',
+    downloadUrl: 'https://marketplace.cyberark.com/details/azure-sql-database',
+    protocolOrPlatform: 'TDS / Port 1433',
+    lastSynced: '2026-07-10',
+    verified: true,
+    version: '1.8.2',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.7,
+    downloadCount: 5120,
+    targetSystems: ['Azure', 'SQL Server', 'Database', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-entra-id',
+    name: 'Microsoft Entra ID (Azure AD) Account Management Plugin',
+    category: 'CPM Plugins',
+    description: 'Manages privileged cloud identities, emergency break-glass accounts, and global administrators in Microsoft Entra ID with Graph API.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/microsoft-entra-id-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/microsoft-entra-id-plugin',
+    protocolOrPlatform: 'Microsoft Graph API / OAuth 2.0',
+    lastSynced: '2026-09-02',
+    verified: true,
+    version: '3.0.1',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.9,
+    downloadCount: 7890,
+    targetSystems: ['Entra ID', 'Azure AD', 'Privilege Cloud', 'M365']
+  },
+  {
+    id: 'mkt-psm-dbeaver',
+    name: 'DBeaver Universal Database Tool PSM Connection Component',
+    category: 'PSM Connection Components',
+    description: 'Enables privileged session recording, credential injection, and keystroke monitoring for DBeaver Community and Enterprise editions.',
+    vendor: 'CyberArk Community',
+    link: 'https://marketplace.cyberark.com/details/dbeaver-psm-component',
+    downloadUrl: 'https://marketplace.cyberark.com/details/dbeaver-psm-component',
+    protocolOrPlatform: 'Windows Desktop RDP',
+    lastSynced: '2026-09-01',
+    verified: true,
+    version: '2.1.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.6,
+    downloadCount: 3410,
+    targetSystems: ['PostgreSQL', 'MySQL', 'Oracle', 'Snowflake', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-psm-securecrt',
+    name: 'SecureCRT SSH/Telnet PSM Connection Component',
+    category: 'PSM Connection Components',
+    description: 'High-performance SSH terminal connection component for network engineers managing Cisco, Juniper, and Arista switches via PSM with full text indexing.',
+    vendor: 'CyberArk Community',
+    link: 'https://marketplace.cyberark.com/details/securecrt-connection-component',
+    downloadUrl: 'https://marketplace.cyberark.com/details/securecrt-connection-component',
+    protocolOrPlatform: 'SSH / Terminal',
+    lastSynced: '2026-08-28',
+    verified: true,
+    version: '1.9.5',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.8,
+    downloadCount: 4620,
+    targetSystems: ['Network Infrastructure', 'Cisco IOS', 'Juniper Junos', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-psm-ssms',
+    name: 'SQL Server Management Studio (SSMS) PSM Component',
+    category: 'PSM Connection Components',
+    description: 'Native PSM connection component launching Microsoft SSMS with transparent Windows Authentication or SQL database credential injection.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/ssms-psm-component',
+    downloadUrl: 'https://marketplace.cyberark.com/details/ssms-psm-component',
+    protocolOrPlatform: 'Windows Client App / Port 1433',
+    lastSynced: '2026-08-10',
+    verified: true,
+    version: '2.3.1',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.9,
+    downloadCount: 9450,
+    targetSystems: ['Microsoft SQL Server', 'Windows Server', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-psm-winscp',
+    name: 'WinSCP SFTP/SCP File Transfer PSM Component',
+    category: 'PSM Connection Components',
+    description: 'Secure file upload and download proxy with full session recording, file transfer audit trails, and SFTP isolation through PSM.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/winscp-psm-component',
+    downloadUrl: 'https://marketplace.cyberark.com/details/winscp-psm-component',
+    protocolOrPlatform: 'SFTP / SSH / Port 22',
+    lastSynced: '2026-08-19',
+    verified: true,
+    version: '2.0.4',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.8,
+    downloadCount: 6810,
+    targetSystems: ['Linux', 'Solaris', 'SFTP Gateways', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-snowflake',
+    name: 'Snowflake Data Cloud CPM & PSM Integration Bundle',
+    category: 'Tools & Integrations',
+    description: 'Complete privileged access management suite for Snowflake warehouse users, key-pair authentication rotation, and web worksheet isolation.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/snowflake-pam-bundle',
+    downloadUrl: 'https://marketplace.cyberark.com/details/snowflake-pam-bundle',
+    protocolOrPlatform: 'REST / JDBC',
+    lastSynced: '2026-06-25',
+    verified: true,
+    version: '2.2.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.7,
+    downloadCount: 2980,
+    targetSystems: ['Snowflake', 'Cloud Data Warehouse', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-pta-k8s',
+    name: 'Kubernetes Audit Log PTA Sensor',
+    category: 'PTA Sensors',
+    description: 'Streams Kubernetes cluster API audit events into CyberArk Privileged Threat Analytics to detect rogue exec/attach commands into privileged pods.',
+    vendor: 'CyberArk Community',
+    link: 'https://marketplace.cyberark.com/details/k8s-pta-sensor',
+    downloadUrl: 'https://marketplace.cyberark.com/details/k8s-pta-sensor',
+    protocolOrPlatform: 'Syslog / Webhook',
+    lastSynced: '2026-07-19',
+    verified: true,
+    version: '1.4.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.6,
+    downloadCount: 1850,
+    targetSystems: ['Kubernetes', 'OpenShift', 'Container Security', 'PTA']
+  },
+  {
+    id: 'mkt-cisco-nexus',
+    name: 'Cisco IOS XE & Nexus Switch CPM Plugin',
+    category: 'CPM Plugins',
+    description: 'Automated verify, change, and reconcile for Cisco network switches with terminal prompt handling for enable passwords and TACACS+ fallbacks.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/cisco-nexus-cpm-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/cisco-nexus-cpm-plugin',
+    protocolOrPlatform: 'SSH Terminal / Port 22',
+    lastSynced: '2026-08-30',
+    verified: true,
+    version: '3.2.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.9,
+    downloadCount: 8210,
+    targetSystems: ['Cisco IOS', 'Cisco Nexus', 'Network Switches', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-palo-alto',
+    name: 'Palo Alto PAN-OS Firewall CPM & PSM Connector',
+    category: 'CPM Plugins',
+    description: 'Full credentials management and web console privileged session proxy for Palo Alto Networks Next-Gen Firewalls and Panorama.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/palo-alto-panos-connector',
+    downloadUrl: 'https://marketplace.cyberark.com/details/palo-alto-panos-connector',
+    protocolOrPlatform: 'XML API / SSH / HTTPS',
+    lastSynced: '2026-07-28',
+    verified: true,
+    version: '2.5.1',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.8,
+    downloadCount: 4920,
+    targetSystems: ['Palo Alto Firewalls', 'Panorama', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-servicenow',
+    name: 'ServiceNow Service Graph Connector for Privilege Cloud',
+    category: 'Tools & Integrations',
+    description: 'Synchronizes CI assets from ServiceNow CMDB into CyberArk Safes for automatic account onboarding and ticketing change validation.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/servicenow-connector',
+    downloadUrl: 'https://marketplace.cyberark.com/details/servicenow-connector',
+    protocolOrPlatform: 'REST API / OAuth 2.0',
+    lastSynced: '2026-09-08',
+    verified: true,
+    version: '4.1.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.9,
+    downloadCount: 6150,
+    targetSystems: ['ServiceNow', 'CMDB', 'Privilege Cloud', 'ITSM']
+  },
+  {
+    id: 'mkt-terraform',
+    name: 'Terraform Provider for CyberArk Privilege Cloud & PAM',
+    category: 'Cloud & DevOps',
+    description: 'Infrastructure as Code provider to declare and manage Safes, account credentials, and platform policies directly via Terraform HCL.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/terraform-provider-cyberark',
+    downloadUrl: 'https://marketplace.cyberark.com/details/terraform-provider-cyberark',
+    protocolOrPlatform: 'REST API / Go SDK',
+    lastSynced: '2026-09-12',
+    verified: true,
+    version: '1.5.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.9,
+    downloadCount: 11200,
+    targetSystems: ['Terraform', 'DevOps', 'Privilege Cloud', 'CI/CD']
+  },
+  {
+    id: 'mkt-ansible',
+    name: 'Ansible Collection for CyberArk Privileged Access Manager',
+    category: 'Cloud & DevOps',
+    description: 'Automates account retrieval, safe creation, and credential rotation inside Ansible playbooks using CyberArk CCP REST API and AAM.',
+    vendor: 'CyberArk Community',
+    link: 'https://marketplace.cyberark.com/details/ansible-cyberark-collection',
+    downloadUrl: 'https://marketplace.cyberark.com/details/ansible-cyberark-collection',
+    protocolOrPlatform: 'Python / REST API',
+    lastSynced: '2026-08-14',
+    verified: true,
+    version: '2.1.2',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.7,
+    downloadCount: 8430,
+    targetSystems: ['Ansible', 'Linux', 'DevOps', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-splunk-addon',
+    name: 'Splunk Add-on for CyberArk Privilege Cloud & Vault',
+    category: 'PTA Sensors',
+    description: 'Parses syslog and CEF events from CyberArk Privilege Cloud, Digital Vault italog, and PTA into Splunk CIM compliance data models.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/splunk-addon-cyberark',
+    downloadUrl: 'https://marketplace.cyberark.com/details/splunk-addon-cyberark',
+    protocolOrPlatform: 'CEF / Syslog / TCP 514',
+    lastSynced: '2026-08-22',
+    verified: true,
+    version: '3.0.3',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.8,
+    downloadCount: 13500,
+    targetSystems: ['Splunk', 'SIEM', 'Privilege Cloud', 'PTA']
+  },
+  {
+    id: 'mkt-sentinel-connector',
+    name: 'Microsoft Sentinel Data Connector for CyberArk ISPSS',
+    category: 'PTA Sensors',
+    description: 'Direct ingestion connector streaming Privilege Cloud audit logs and Privileged Threat Analytics alerts into Microsoft Sentinel workspaces.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/microsoft-sentinel-connector',
+    downloadUrl: 'https://marketplace.cyberark.com/details/microsoft-sentinel-connector',
+    protocolOrPlatform: 'Azure Log Analytics REST API',
+    lastSynced: '2026-09-05',
+    verified: true,
+    version: '2.0.1',
+    compatibleWith: ['Privilege Cloud', 'Both'],
+    rating: 4.8,
+    downloadCount: 7210,
+    targetSystems: ['Microsoft Sentinel', 'Azure', 'Privilege Cloud', 'SIEM']
+  },
+  {
+    id: 'mkt-vmware-vcenter',
+    name: 'VMware vCenter & ESXi Host Root Account CPM Plugin',
+    category: 'CPM Plugins',
+    description: 'Rotates VMware vCenter SSO administrator credentials and ESXi host root SSH passwords with verification and automated reconciliation.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/vmware-vcenter-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/vmware-vcenter-plugin',
+    protocolOrPlatform: 'vSphere REST API / SSH',
+    lastSynced: '2026-07-31',
+    verified: true,
+    version: '2.2.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.7,
+    downloadCount: 6540,
+    targetSystems: ['VMware vSphere', 'ESXi', 'Privilege Cloud', 'Virtualization']
+  },
+  {
+    id: 'mkt-oracle-db',
+    name: 'Oracle Database Listener & Schema User CPM Plugin',
+    category: 'CPM Plugins',
+    description: 'High-availability password rotation for Oracle Database sys, system, and custom schema accounts supporting Oracle 19c and 23ai.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/oracle-database-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/oracle-database-plugin',
+    protocolOrPlatform: 'Oracle Net / Port 1521',
+    lastSynced: '2026-08-05',
+    verified: true,
+    version: '3.1.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.9,
+    downloadCount: 9810,
+    targetSystems: ['Oracle Database', 'RAC', 'Privilege Cloud', 'Database']
+  },
+  {
+    id: 'mkt-psm-edge-web',
+    name: 'Microsoft Edge Chromium PSM Web Application Dispatcher',
+    category: 'PSM Connection Components',
+    description: 'Standard enterprise dispatcher for web management consoles with automatic browser driver management, AppLocker profiles, and session recording.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/psm-edge-webapp-dispatcher',
+    downloadUrl: 'https://marketplace.cyberark.com/details/psm-edge-webapp-dispatcher',
+    protocolOrPlatform: 'Selenium WebDriver / Edge',
+    lastSynced: '2026-09-18',
+    verified: true,
+    version: '15.2.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.8,
+    downloadCount: 15400,
+    targetSystems: ['Web Applications', 'Cloud Portals', 'Privilege Cloud', 'PSM']
+  },
+  {
+    id: 'mkt-gcp-service-account',
+    name: 'Google Cloud Platform (GCP) Service Account Key CPM Plugin',
+    category: 'Cloud & DevOps',
+    description: 'Rotates Google Cloud Platform service account private keys (JSON/P12 format), disabling expired keys and staging new credentials in GCP IAM.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/gcp-service-account-keys',
+    downloadUrl: 'https://marketplace.cyberark.com/details/gcp-service-account-keys',
+    protocolOrPlatform: 'Google Cloud IAM REST API v1',
+    lastSynced: '2026-09-10',
+    verified: true,
+    version: '2.3.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.9,
+    downloadCount: 6420,
+    targetSystems: ['Google Cloud Platform', 'GCP IAM', 'DevOps', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-cyberark-identity-connector',
+    name: 'CyberArk Identity Connector for Privilege Cloud Active Directory',
+    category: 'Tools & Integrations',
+    description: 'Bridges on-premises Active Directory and LDAP trees to CyberArk Identity Security Platform (ISPSS) for MFA, SSO, and user provisioning.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/cyberark-identity-connector',
+    downloadUrl: 'https://marketplace.cyberark.com/details/cyberark-identity-connector',
+    protocolOrPlatform: 'LDAP / Kerberos / HTTPS 443',
+    lastSynced: '2026-09-22',
+    verified: true,
+    version: '24.8.0',
+    compatibleWith: ['Privilege Cloud', 'Both'],
+    rating: 4.9,
+    downloadCount: 8900,
+    targetSystems: ['Active Directory', 'CyberArk Identity', 'Privilege Cloud', 'ISPSS']
+  },
+  {
+    id: 'mkt-crowdstrike-fdr',
+    name: 'CrowdStrike Falcon FDR Threat Ingestion Sensor for PTA',
+    category: 'PTA Sensors',
+    description: 'Streams CrowdStrike Falcon endpoint detections and suspicious credential dumping events into CyberArk PTA for correlated threat response.',
+    vendor: 'CyberArk Community',
+    link: 'https://marketplace.cyberark.com/details/crowdstrike-fdr-sensor',
+    downloadUrl: 'https://marketplace.cyberark.com/details/crowdstrike-fdr-sensor',
+    protocolOrPlatform: 'AWS S3 / CrowdStrike FDR Stream API',
+    lastSynced: '2026-08-11',
+    verified: true,
+    version: '1.8.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.8,
+    downloadCount: 3950,
+    targetSystems: ['CrowdStrike Falcon', 'EDR', 'Privilege Cloud', 'PTA']
+  },
+  {
+    id: 'mkt-hashicorp-vault',
+    name: 'HashiCorp Vault Dynamic Secrets Sync Engine',
+    category: 'Cloud & DevOps',
+    description: 'Bi-directional synchronization engine between HashiCorp Vault key-value secrets engines and CyberArk Privilege Cloud Safes.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/hashicorp-vault-sync',
+    downloadUrl: 'https://marketplace.cyberark.com/details/hashicorp-vault-sync',
+    protocolOrPlatform: 'REST API / Token Auth',
+    lastSynced: '2026-08-25',
+    verified: true,
+    version: '2.0.2',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.7,
+    downloadCount: 5120,
+    targetSystems: ['HashiCorp Vault', 'Kubernetes', 'Privilege Cloud', 'DevOps']
+  },
+  {
+    id: 'mkt-workday-plugin',
+    name: 'Workday Enterprise HCM Integration System User Plugin',
+    category: 'CPM Plugins',
+    description: 'Automated verification and rotation for Workday Integration System Users (ISU) and administrator credentials using Workday SOAP API.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/workday-isu-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/workday-isu-plugin',
+    protocolOrPlatform: 'Workday SOAP API / Port 443',
+    lastSynced: '2026-07-22',
+    verified: true,
+    version: '1.6.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.6,
+    downloadCount: 2840,
+    targetSystems: ['Workday', 'HR Systems', 'Privilege Cloud', 'SaaS']
+  },
+  {
+    id: 'mkt-salesforce-plugin',
+    name: 'Salesforce CRM System Administrator Password & Security Token Plugin',
+    category: 'CPM Plugins',
+    description: 'Manages Salesforce privileged administrator passwords and simultaneously resets security tokens for API integrations.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/salesforce-cpm-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/salesforce-cpm-plugin',
+    protocolOrPlatform: 'Salesforce Partner SOAP / REST API',
+    lastSynced: '2026-08-16',
+    verified: true,
+    version: '2.1.4',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.8,
+    downloadCount: 4610,
+    targetSystems: ['Salesforce', 'CRM', 'Privilege Cloud', 'Cloud Portals']
+  },
+  {
+    id: 'mkt-sap-gui-psm',
+    name: 'SAP GUI NetWeaver PSM Connection Component',
+    category: 'PSM Connection Components',
+    description: 'Direct SAP GUI logon launcher injecting credentials into SAP Logon pad with full transaction code (TCode) recording and text indexing.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/sap-gui-psm-component',
+    downloadUrl: 'https://marketplace.cyberark.com/details/sap-gui-psm-component',
+    protocolOrPlatform: 'SAP DIAG / Port 3200',
+    lastSynced: '2026-09-03',
+    verified: true,
+    version: '3.4.1',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.9,
+    downloadCount: 8750,
+    targetSystems: ['SAP ERP', 'SAP S/4HANA', 'Privilege Cloud', 'PSM']
+  },
+  {
+    id: 'mkt-github-enterprise',
+    name: 'GitHub Enterprise Server & Cloud CPM Plugin',
+    category: 'Cloud & DevOps',
+    description: 'Rotates GitHub Enterprise bot user Personal Access Tokens (PATs) and organizational SSH deploy keys using GitHub Octokit REST v3.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/github-enterprise-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/github-enterprise-plugin',
+    protocolOrPlatform: 'GitHub REST API v3',
+    lastSynced: '2026-08-08',
+    verified: true,
+    version: '1.9.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.8,
+    downloadCount: 7120,
+    targetSystems: ['GitHub', 'GitHub Enterprise', 'CI/CD', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-cyberark-pstools',
+    name: 'psPAS: PowerShell Automation Module for CyberArk PAM & Privilege Cloud',
+    category: 'Tools & Integrations',
+    description: 'Comprehensive, open-source PowerShell module creating and automating Safes, Accounts, Platforms, Users, and Requests across REST APIs.',
+    vendor: 'CyberArk Community',
+    link: 'https://marketplace.cyberark.com/details/pspas-powershell-module',
+    downloadUrl: 'https://marketplace.cyberark.com/details/pspas-powershell-module',
+    protocolOrPlatform: 'PowerShell / CyberArk REST API',
+    lastSynced: '2026-09-24',
+    verified: true,
+    version: '6.5.2',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 5.0,
+    downloadCount: 24500,
+    targetSystems: ['PowerShell', 'Automation', 'Privilege Cloud', 'REST API']
+  },
+  {
+    id: 'mkt-mongodb-atlas',
+    name: 'MongoDB Atlas Database User & Programmatic API Key Plugin',
+    category: 'CPM Plugins',
+    description: 'Automated rotation for MongoDB Atlas database user passwords and organization-level programmatic API keys with IP whitelist validation.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/mongodb-atlas-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/mongodb-atlas-plugin',
+    protocolOrPlatform: 'Atlas Administration REST API',
+    lastSynced: '2026-07-15',
+    verified: true,
+    version: '1.5.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.7,
+    downloadCount: 3290,
+    targetSystems: ['MongoDB Atlas', 'NoSQL Database', 'Cloud', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-redhat-openshift',
+    name: 'Red Hat OpenShift ServiceAccount Token & Kubeconfig Plugin',
+    category: 'Cloud & DevOps',
+    description: 'Manages OpenShift cluster administrator credentials, service account tokens, and automated rotation of cluster certificates.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/openshift-cpm-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/openshift-cpm-plugin',
+    protocolOrPlatform: 'OpenShift API / HTTPS 6443',
+    lastSynced: '2026-08-18',
+    verified: true,
+    version: '2.0.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.7,
+    downloadCount: 2680,
+    targetSystems: ['OpenShift', 'Red Hat Linux', 'Kubernetes', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-fortinet-fortigate',
+    name: 'Fortinet FortiGate Firewall CLI & Web Console Connector',
+    category: 'CPM Plugins',
+    description: 'Credentials management for FortiOS admin accounts over SSH and transparent PSM web dispatcher session proxy into FortiGate Admin GUI.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/fortinet-fortigate-connector',
+    downloadUrl: 'https://marketplace.cyberark.com/details/fortinet-fortigate-connector',
+    protocolOrPlatform: 'SSH / HTTPS 443 / FortiOS REST',
+    lastSynced: '2026-08-27',
+    verified: true,
+    version: '2.4.0',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.8,
+    downloadCount: 6890,
+    targetSystems: ['Fortinet', 'FortiGate', 'Firewalls', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-f5-bigip',
+    name: 'F5 BIG-IP LTM & APM Administrator Password Plugin',
+    category: 'CPM Plugins',
+    description: 'Rotates root and admin accounts on F5 BIG-IP appliances via iControl REST API and validates high-availability config sync state.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/f5-bigip-plugin',
+    downloadUrl: 'https://marketplace.cyberark.com/details/f5-bigip-plugin',
+    protocolOrPlatform: 'iControl REST API / HTTPS 443',
+    lastSynced: '2026-07-29',
+    verified: true,
+    version: '2.2.1',
+    compatibleWith: ['Both', 'Privilege Cloud', 'Self-Hosted PAM'],
+    rating: 4.7,
+    downloadCount: 4720,
+    targetSystems: ['F5 Networks', 'BIG-IP', 'Load Balancers', 'Privilege Cloud']
+  },
+  {
+    id: 'mkt-cyberark-epm-integration',
+    name: 'CyberArk Endpoint Privilege Manager (EPM) Privilege Cloud Bridge',
+    category: 'Tools & Integrations',
+    description: 'Synchronizes loosely-connected workstation local administrator accounts discovered by EPM into Privilege Cloud automated rotation Safes.',
+    vendor: 'Official CyberArk',
+    link: 'https://marketplace.cyberark.com/details/cyberark-epm-integration',
+    downloadUrl: 'https://marketplace.cyberark.com/details/cyberark-epm-integration',
+    protocolOrPlatform: 'REST API / ISPSS Cloud',
+    lastSynced: '2026-09-17',
+    verified: true,
+    version: '14.1.0',
+    compatibleWith: ['Privilege Cloud', 'Both'],
+    rating: 4.9,
+    downloadCount: 9150,
+    targetSystems: ['CyberArk EPM', 'Windows Endpoints', 'macOS', 'Privilege Cloud']
+  }
+];
+
+export const INITIAL_COMMUNITY_THREADS: CommunityThread[] = [
+  {
+    id: 'th-1051',
+    title: 'Privilege Cloud Secure Tunnel disconnected after network firewall update',
+    component: 'Privilege Cloud',
+    snippet: 'Our on-prem Privilege Cloud Connector shows Disconnected in ISPSS Connector Management. SecureTunnel.log indicates SSL handshake timeout to tenant.cyberark.cloud on port 443...',
+    url: 'https://community.cyberark.com/s/question/0D52J00008Kxyz/privilege-cloud-secure-tunnel-timeout',
+    replyCount: 19,
+    lastActivity: '30 mins ago',
+    author: 'CloudSec_Marcus',
+    isSolved: true,
+    tags: ['privilege-cloud', 'secure-tunnel', 'connector-management', 'ispss']
+  },
+  {
+    id: 'th-1050',
+    title: 'Connector Management Agent token expired during Privilege Cloud PSM upgrade',
+    component: 'Privilege Cloud',
+    snippet: 'Upgrading our Privilege Cloud PSM connector from 14.2 to 15.0.3. Running the installer gives error: Connector token is invalid or expired. How to generate fresh token from ISPSS?',
+    url: 'https://community.cyberark.com/s/question/0D52J00008Labc/connector-management-token-expired',
+    replyCount: 11,
+    lastActivity: '1 hour ago',
+    author: 'PAM_Admin_Vikram',
+    isSolved: true,
+    tags: ['privilege-cloud', 'psm-upgrade', 'token', 'connector-installer']
+  },
+  {
+    id: 'th-1049',
+    title: 'CACPM406E timeout when changing password on Cisco Nexus 9k via SSH',
+    component: 'CPM',
+    snippet: 'CPM fails with execution timeout. The debug log shows it connects to port 22, sends username, but hangs after receiving the MOTD banner with ANSI escape sequences...',
+    url: 'https://community.cyberark.com/s/question/0D52J00008Fxyz/cacpm406e-timeout-cisco-nexus-9k',
+    replyCount: 14,
+    lastActivity: '2 hours ago',
+    author: 'NetSecLead_Dave',
+    isSolved: true,
+    tags: ['cpm', 'cisco-nexus', 'ssh-prompt', 'timeout']
+  },
+  {
+    id: 'th-1048',
+    title: 'PSMSR280E return code 3221225786 after updating Edge to version 128',
+    component: 'PSM',
+    snippet: 'Our PSM servers started failing all web dispatchers this morning. Event viewer shows Microsoft-Windows-AppLocker event 8004 blocking msedgedriver.exe...',
+    url: 'https://community.cyberark.com/s/question/0D52J00008Gabc/psmsr280e-edge-applocker-blocking',
+    replyCount: 22,
+    lastActivity: '5 hours ago',
+    author: 'VaultAdmin_Sarah',
+    isSolved: true,
+    tags: ['psm', 'applocker', 'edge-driver', 'web-dispatcher']
+  },
+  {
+    id: 'th-1047',
+    title: 'Best practice for migrating Vault DR cluster to Windows Server 2025?',
+    component: 'Vault',
+    snippet: 'Planning our PAM 15.2 LTS upgrade cycle. Is in-place OS upgrade supported for Vault DR nodes to Windows Server 2025, or is clean install with CAVaultManager restore recommended?',
+    url: 'https://community.cyberark.com/s/question/0D52J00008Hqwe/vault-dr-windows-2025-migration',
+    replyCount: 9,
+    lastActivity: '1 day ago',
+    author: 'EnterpriseArchitect_Ron',
+    isSolved: false,
+    tags: ['vault', 'disaster-recovery', 'windows-2025', 'upgrade']
+  },
+  {
+    id: 'th-1046',
+    title: 'ITATS006E on PVWA after regenerating SSL certificate on Vault server',
+    component: 'PVWA',
+    snippet: 'Replaced self-signed Vault cert with corporate CA certificate. Now PVWA fails with Station is not authenticated to the Vault. Steps to update Vault.ini server certificate thumbprint?',
+    url: 'https://community.cyberark.com/s/question/0D52J00008Ityu/itats006e-vault-ssl-certificate-renewal',
+    replyCount: 18,
+    lastActivity: '2 days ago',
+    author: 'CyberOps_Kavita',
+    isSolved: true,
+    tags: ['pvwa', 'vault-ssl', 'credfile', 'certificates']
+  },
+  {
+    id: 'th-1045',
+    title: 'CCP REST API returning 404 for newly onboarded Safe accounts',
+    component: 'CCP',
+    snippet: 'Created a new safe and added the AppProviderUser as safe member with Retrieve & List permissions. Still getting APPAP004E Account does not exist in safe...',
+    url: 'https://community.cyberark.com/s/question/0D52J00008Jklm/ccp-rest-api-cache-refresh-delay',
+    replyCount: 7,
+    lastActivity: '3 days ago',
+    author: 'CloudSec_Alex',
+    isSolved: true,
+    tags: ['ccp', 'aam', 'cache-refresh', 'rest-api']
+  }
+];

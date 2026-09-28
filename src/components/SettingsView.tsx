@@ -1,0 +1,236 @@
+import React, { useState } from 'react';
+import {
+  Settings,
+  Bell,
+  Layers,
+  Database,
+  Check,
+  Save,
+} from 'lucide-react';
+import { PamComponent, UserPreferences } from '../types';
+
+interface SettingsViewProps {
+  preferences: UserPreferences;
+  onUpdatePreferences: (newPrefs: UserPreferences) => void;
+  apiStatus: {
+    online: boolean;
+    errorCount: number;
+    advisoryCount: number;
+    hasGeminiKey: boolean;
+  };
+}
+
+export const SettingsView: React.FC<SettingsViewProps> = ({
+  preferences,
+  onUpdatePreferences,
+  apiStatus,
+}) => {
+  const [prefs, setPrefs] = useState<UserPreferences>({ ...preferences });
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const ALL_COMPONENTS: PamComponent[] = [
+    'Privilege Cloud',
+    'Vault',
+    'PVWA',
+    'CPM',
+    'PSM',
+    'PTA',
+    'CCP',
+    'Conjur',
+  ];
+
+  const handleToggleComponent = (comp: PamComponent) => {
+    const exists = prefs.followedComponents.includes(comp);
+    let updated: PamComponent[];
+    if (exists) {
+      updated = prefs.followedComponents.filter((c) => c !== comp);
+    } else {
+      updated = [...prefs.followedComponents, comp];
+    }
+    setPrefs({ ...prefs, followedComponents: updated });
+  };
+
+  const handleSave = () => {
+    onUpdatePreferences(prefs);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2500);
+  };
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="rounded-[14px] bg-[#12151C] border border-[#232833] p-6 sm:p-8 shadow-[0_1px_2px_rgba(0,0,0,0.4)]">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-[#101E26] text-[#64D2FF] border border-[#64D2FF]/30 mb-3">
+          <Settings className="w-3.5 h-3.5 text-[#0A84FF]" />
+          <span>Operator Preferences</span>
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#F5F6F8] tracking-tight">
+          Settings & Architecture Configuration
+        </h1>
+        <p className="mt-2 text-sm text-[#A6AEC0] leading-relaxed">
+          Customize your followed PAM components, alerts for high-severity CVEs, and configure live CyberArk documentation grounding.
+        </p>
+      </div>
+
+      {/* Settings Cards */}
+      <div className="space-y-5">
+        {/* Followed Components */}
+        <div className="p-6 rounded-[14px] bg-[#12151C] border border-[#232833] space-y-4">
+          <div className="flex items-center gap-2 text-[#F5F6F8] font-bold text-base">
+            <Layers className="w-4 h-4 text-[#0A84FF]" />
+            <span>Followed PAM Architecture Components</span>
+          </div>
+          <p className="text-xs text-[#A6AEC0] leading-relaxed">
+            Select the components deployed in your enterprise environment. VaultDesk will prioritize alerts and runbooks matching your stack.
+          </p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+            {ALL_COMPONENTS.map((comp) => {
+              const isChecked = prefs.followedComponents.includes(comp);
+              return (
+                <button
+                  key={comp}
+                  onClick={() => handleToggleComponent(comp)}
+                  className={`p-3 rounded-[10px] border text-xs font-semibold flex items-center justify-between transition-all ${
+                    isChecked
+                      ? 'bg-[#1A1E27] border-[#0A84FF] text-[#64D2FF]'
+                      : 'bg-[#1A1E27] border-[#2E3440] text-[#A6AEC0] hover:text-[#F5F6F8]'
+                  }`}
+                >
+                  <span>{comp}</span>
+                  {isChecked && <Check className="w-4 h-4 text-[#0A84FF]" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Notification Preferences */}
+        <div className="p-6 rounded-[14px] bg-[#12151C] border border-[#232833] space-y-4">
+          <div className="flex items-center gap-2 text-[#F5F6F8] font-bold text-base">
+            <Bell className="w-4 h-4 text-[#FF9F0A]" />
+            <span>Advisory & Patch Alert Preferences</span>
+          </div>
+
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 p-3.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={prefs.notifyOnCriticalCve}
+                onChange={(e) =>
+                  setPrefs({ ...prefs, notifyOnCriticalCve: e.target.checked })
+                }
+                className="mt-1 rounded bg-[#12151C] border-[#2E3440] text-[#0A84FF] focus:ring-0 w-4 h-4 cursor-pointer"
+              />
+              <div className="space-y-0.5">
+                <span className="text-sm font-semibold text-[#F5F6F8] block">
+                  Highlight Critical CVEs (CVSS 8.0+)
+                </span>
+                <span className="text-xs text-[#A6AEC0] block">
+                  Displays immediate warning badges in header when active Remote Code Execution or Authentication Bypass advisories affect followed components.
+                </span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={prefs.notifyOnPatchRelease}
+                onChange={(e) =>
+                  setPrefs({ ...prefs, notifyOnPatchRelease: e.target.checked })
+                }
+                className="mt-1 rounded bg-[#12151C] border-[#2E3440] text-[#0A84FF] focus:ring-0 w-4 h-4 cursor-pointer"
+              />
+              <div className="space-y-0.5">
+                <span className="text-sm font-semibold text-[#F5F6F8] block">
+                  Quarterly Maintenance & Patch Rollup Notifications
+                </span>
+                <span className="text-xs text-[#A6AEC0] block">
+                  Notify of new LTS rollups (e.g. 14.0 LTS cumulative patches) with breaking change assessments.
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Data Source & AI Grounding Management */}
+        <div className="p-6 rounded-[14px] bg-[#12151C] border border-[#232833] space-y-4">
+          <div className="flex items-center gap-2 text-[#F5F6F8] font-bold text-base">
+            <Database className="w-4 h-4 text-[#0A84FF]" />
+            <span>Data Source & Live Grounding Management</span>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <div className="p-3.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-[#F5F6F8] block">
+                  CyberArk Official Documentation Base
+                </span>
+                <span className="text-[#6E7787] font-mono text-[11px]">
+                  https://docs.cyberark.com
+                </span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full bg-[#12241A] text-[#30D158] border border-[#30D158]/30 text-[11px] font-semibold">
+                Connected
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-[#F5F6F8] block">
+                  CyberArk Technical Community Portal
+                </span>
+                <span className="text-[#6E7787] font-mono text-[11px]">
+                  https://community.cyberark.com
+                </span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full bg-[#12241A] text-[#30D158] border border-[#30D158]/30 text-[11px] font-semibold">
+                Direct Deep-Linking
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-[#F5F6F8] block">
+                  Gemini Web Grounding Engine
+                </span>
+                <span className="text-[#A6AEC0] text-[11px]">
+                  {apiStatus.hasGeminiKey
+                    ? 'Active (GEMINI_API_KEY detected in server environment)'
+                    : 'Offline Diagnostic Engine active'}
+                </span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full bg-[#101E26] text-[#64D2FF] border border-[#64D2FF]/30 text-[11px] font-semibold">
+                Gemini 3.8 Flash
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Save Bar */}
+        <div className="flex items-center justify-between pt-2">
+          <span className="text-xs text-[#6E7787]">
+            Preferences are persisted in browser state.
+          </span>
+
+          <button
+            onClick={handleSave}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] bg-[#0A84FF] hover:bg-[#3B9EFF] text-white font-semibold text-sm shadow-[0_1px_2px_rgba(0,0,0,0.4)] transition-colors"
+          >
+            {savedSuccess ? (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Saved Preferences!</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>Save Preferences</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
