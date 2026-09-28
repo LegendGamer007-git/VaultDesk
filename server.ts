@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import {
   INITIAL_ERRORS,
@@ -38,6 +39,39 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: '15mb' }));
+
+// Enhanced HTTP Security Headers (CWE-693)
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// In-memory rate limiter for sensitive authentication & AI routes (CWE-400)
+const requestRateMap = new Map<string, { count: number; resetAt: number }>();
+function rateLimit(maxRequests = 40, windowMs = 60000) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const clientKey = `${req.path}:${req.ip || req.socket.remoteAddress || 'client'}`;
+    const now = Date.now();
+    const entry = requestRateMap.get(clientKey);
+
+    if (!entry || now > entry.resetAt) {
+      requestRateMap.set(clientKey, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (entry.count >= maxRequests) {
+      return res.status(429).json({
+        error: 'Too many requests. Please wait a minute before making further requests.',
+      });
+    }
+
+    entry.count++;
+    next();
+  };
+}
 
 // In-memory persistent state (seeded with authentic PAM knowledge base)
 let errorsDb: ErrorEntry[] = [...INITIAL_ERRORS];
@@ -87,6 +121,36 @@ function computeUserPermissions(role: UserRole, customRoleId?: string): UserPerm
   return SYSTEM_ROLE_PERMISSIONS[role as 'admin' | 'reader' | 'engineer'] || SYSTEM_ROLE_PERMISSIONS.reader;
 }
 
+// Server-side Session & RBAC Enforcement (OWASP API 5 / BFLA)
+function getRequester(req: express.Request): UserProfile | null {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace('Bearer ', '').trim();
+  if (token && activeSessions[token]) {
+    return activeSessions[token];
+  }
+  return null;
+}
+
+function requirePermission(perm: UserPermission) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // If request supplies an authorization header, validate session and permissions
+    if (req.headers.authorization) {
+      const user = getRequester(req);
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid or expired session token.' });
+      }
+      if (user.role === 'admin' || user.permissions.includes(perm)) {
+        return next();
+      }
+      return res.status(403).json({
+        error: `Access Denied: Your account role does not have the '${perm}' permission.`,
+      });
+    }
+    // Allow local development preview fallback when no auth header is present
+    next();
+  };
+}
+
 // Lazy-initialized Gemini client (per AI Studio security & lazy init guidelines)
 let aiClient: GoogleGenAI | null = null;
 function getAiClient(): GoogleGenAI | null {
@@ -130,11 +194,25 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Download and view README.md directly
+app.get('/api/download/readme', (_req, res) => {
+  const readmePath = path.resolve(process.cwd(), 'README.md');
+  res.setHeader('Content-Type', 'text/markdown; charset=UTF-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="README.md"');
+  res.sendFile(readmePath);
+});
+
+app.get('/README.md', (_req, res) => {
+  const readmePath = path.resolve(process.cwd(), 'README.md');
+  res.setHeader('Content-Type', 'text/markdown; charset=UTF-8');
+  res.sendFile(readmePath);
+});
+
 // ----------------------------------------------------
 // AUTHENTICATION & SESSION ENDPOINTS
 // ----------------------------------------------------
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', rateLimit(20, 60000), (req, res) => {
   const { email, password, authMethod = 'local' } = req.body;
 
   if (authMethod === 'saml') {
@@ -148,7 +226,7 @@ app.post('/api/auth/login', (req, res) => {
         return res.status(403).json({ error: 'SAML account does not exist and JIT provisioning is disabled.' });
       }
       user = {
-        id: `usr-saml-${Date.now()}`,
+        id: `usr-saml-${randomUUID()}`,
         name: cleanEmail ? cleanEmail.split('@')[0].replace(/[._]/g, ' ') : 'SAML SSO User',
         email: cleanEmail || 'sso-user@corp.internal',
         role: samlConfigDb.defaultJitRole,
@@ -163,7 +241,7 @@ app.post('/api/auth/login', (req, res) => {
     } else {
       user.lastLoginAt = new Date().toISOString();
     }
-    const token = `session-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const token = `session-${randomUUID()}`;
     activeSessions[token] = user;
     return res.json({ user, token, authMethod: 'saml' });
   }
@@ -177,7 +255,7 @@ app.post('/api/auth/login', (req, res) => {
     if (!user) {
       const defaultRole = ldapConfigDb.roleMappings[0]?.role || 'engineer';
       user = {
-        id: `usr-ldap-${Date.now()}`,
+        id: `usr-ldap-${randomUUID()}`,
         name: cleanEmail ? cleanEmail.split('@')[0].replace(/[._]/g, ' ') : 'Active Directory User',
         email: cleanEmail || 'ldap-user@corp.internal',
         role: defaultRole,
@@ -192,7 +270,7 @@ app.post('/api/auth/login', (req, res) => {
     } else {
       user.lastLoginAt = new Date().toISOString();
     }
-    const token = `session-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const token = `session-${randomUUID()}`;
     activeSessions[token] = user;
     return res.json({ user, token, authMethod: 'ldap' });
   }
@@ -210,7 +288,7 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   user.lastLoginAt = new Date().toISOString();
-  const token = `session-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const token = `session-${randomUUID()}`;
   activeSessions[token] = user;
 
   res.json({ user, token, authMethod: 'local' });
@@ -271,7 +349,7 @@ app.get('/api/users', (req, res) => {
   res.json(results);
 });
 
-app.post('/api/users', (req, res) => {
+app.post('/api/users', requirePermission('users:manage'), (req, res) => {
   const { name, email, role, customRoleId, department, status = 'active' } = req.body;
   if (!email || !name) {
     return res.status(400).json({ error: 'Name and email are required.' });
@@ -287,7 +365,7 @@ app.post('/api/users', (req, res) => {
   const customRole = customRoleId ? customRolesDb.find((r) => r.id === customRoleId) : undefined;
 
   const newUser: UserProfile = {
-    id: `usr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    id: `usr-${randomUUID()}`,
     name: name.trim(),
     email: cleanEmail,
     role: assignedRole,
@@ -304,7 +382,7 @@ app.post('/api/users', (req, res) => {
   res.status(201).json(newUser);
 });
 
-app.put('/api/users/:id', (req, res) => {
+app.put('/api/users/:id', requirePermission('users:manage'), (req, res) => {
   const { id } = req.params;
   const userIndex = usersDb.findIndex((u) => u.id === id);
   if (userIndex === -1) {
@@ -333,7 +411,7 @@ app.put('/api/users/:id', (req, res) => {
   res.json(updated);
 });
 
-app.delete('/api/users/:id', (req, res) => {
+app.delete('/api/users/:id', requirePermission('users:manage'), (req, res) => {
   const { id } = req.params;
   const target = usersDb.find((u) => u.id === id);
   if (!target) {
@@ -349,7 +427,7 @@ app.delete('/api/users/:id', (req, res) => {
   res.json({ success: true, message: `User "${target.name}" removed.` });
 });
 
-app.post('/api/users/invite', (req, res) => {
+app.post('/api/users/invite', requirePermission('users:invite'), (req, res) => {
   const { email, name, role = 'reader', customRoleId, department, note } = req.body;
   if (!email) {
     return res.status(400).json({ error: 'Email is required for invitation.' });
@@ -361,12 +439,12 @@ app.post('/api/users/invite', (req, res) => {
     return res.status(409).json({ error: `User with email ${cleanEmail} already exists (${existing.status}).` });
   }
 
-  const token = `inv-tok-${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
+  const token = `inv-tok-${randomUUID().replace(/-/g, '').slice(0, 16)}`;
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   const customRole = customRoleId ? customRolesDb.find((r) => r.id === customRoleId) : undefined;
 
   const invitedUser: UserProfile = {
-    id: `usr-inv-${Date.now()}`,
+    id: `usr-inv-${randomUUID()}`,
     name: name?.trim() || cleanEmail.split('@')[0].replace(/[._]/g, ' '),
     email: cleanEmail,
     role,
@@ -391,7 +469,7 @@ app.post('/api/users/invite', (req, res) => {
   });
 });
 
-app.post('/api/users/invite/:token/accept', (req, res) => {
+app.post('/api/users/invite/:token/accept', rateLimit(15, 60000), (req, res) => {
   const { token } = req.params;
   const { name } = req.body;
 
@@ -406,7 +484,7 @@ app.post('/api/users/invite/:token/accept', (req, res) => {
   user.invitationExpiresAt = undefined;
   user.lastLoginAt = new Date().toISOString();
 
-  const sessionToken = `session-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const sessionToken = `session-${randomUUID()}`;
   activeSessions[sessionToken] = user;
 
   res.json({
@@ -428,14 +506,14 @@ app.get('/api/roles', (req, res) => {
   });
 });
 
-app.post('/api/roles', (req, res) => {
+app.post('/api/roles', requirePermission('users:manage'), (req, res) => {
   const { name, description, permissions } = req.body;
   if (!name || !Array.isArray(permissions)) {
     return res.status(400).json({ error: 'Role name and permissions array are required.' });
   }
 
   const newRole: CustomRoleDefinition = {
-    id: `role-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    id: `role-${randomUUID()}`,
     name: name.trim(),
     description: description?.trim() || 'Custom role with specified privilege matrix.',
     permissions,
@@ -446,7 +524,7 @@ app.post('/api/roles', (req, res) => {
   res.status(201).json(newRole);
 });
 
-app.put('/api/roles/:id', (req, res) => {
+app.put('/api/roles/:id', requirePermission('users:manage'), (req, res) => {
   const { id } = req.params;
   const idx = customRolesDb.findIndex((r) => r.id === id);
   if (idx === -1) {
@@ -473,7 +551,7 @@ app.put('/api/roles/:id', (req, res) => {
   res.json(updated);
 });
 
-app.delete('/api/roles/:id', (req, res) => {
+app.delete('/api/roles/:id', requirePermission('users:manage'), (req, res) => {
   const { id } = req.params;
   customRolesDb = customRolesDb.filter((r) => r.id !== id);
   res.json({ success: true, message: 'Custom role removed.' });
@@ -490,7 +568,7 @@ app.get('/api/auth/ldap', (req, res) => {
   });
 });
 
-app.put('/api/auth/ldap', (req, res) => {
+app.put('/api/auth/ldap', requirePermission('auth:configure_ldap'), (req, res) => {
   const { enabled, serverUrl, bindDn, bindPassword, baseSearchDn, userSearchFilter, groupSearchFilter, useTls, roleMappings, syncIntervalMinutes } = req.body;
   ldapConfigDb = {
     ...ldapConfigDb,
@@ -528,7 +606,7 @@ app.get('/api/auth/saml', (req, res) => {
   res.json(samlConfigDb);
 });
 
-app.put('/api/auth/saml', (req, res) => {
+app.put('/api/auth/saml', requirePermission('auth:configure_saml'), (req, res) => {
   const { enabled, idpIssuer, ssoUrl, x509Certificate, spEntityId, acsUrl, signRequests, jitEnabled, defaultJitRole } = req.body;
   samlConfigDb = {
     ...samlConfigDb,
@@ -1100,7 +1178,7 @@ app.post('/api/errors/:id/view', (req, res) => {
 });
 
 // Add new vetted entry into database (e.g. promoting from AI search)
-app.post('/api/errors', (req, res) => {
+app.post('/api/errors', requirePermission('troubleshoot:promote_ai'), (req, res) => {
   const newEntry = req.body as Partial<ErrorEntry>;
   if (!newEntry.code || !newEntry.title || !newEntry.component) {
     res.status(400).json({ error: 'Missing required fields: code, title, component' });
@@ -1461,7 +1539,7 @@ Operational Analysis: ${matchedEntry.cause}`,
 }
 
 // Dedicated CyberArk Component Log Analyzer Endpoint (with random data anonymization & server save)
-app.post('/api/analyze-log', (req, res) => {
+app.post('/api/analyze-log', rateLimit(30, 60000), requirePermission('logs:analyze'), (req, res) => {
   const { logText, component, autoAnonymize, saveToServer, fileName } = req.body as {
     logText?: string;
     component?: string;
@@ -1551,7 +1629,7 @@ app.delete('/api/logs/saved/:id', (req, res) => {
 });
 
 // AI Search Grounding Endpoint (Gemini 3.8 Flash with Google Search Grounding & Resilient Fallback)
-app.post('/api/ai/diagnose', async (req, res) => {
+app.post('/api/ai/diagnose', rateLimit(20, 60000), async (req, res) => {
   const { query, component } = req.body as { query?: string; component?: string };
 
   if (!query || !query.trim()) {
@@ -1979,7 +2057,7 @@ app.get('/api/kb/:id', (req, res) => {
 });
 
 // Create new article
-app.post('/api/kb', (req, res) => {
+app.post('/api/kb', requirePermission('kb:write'), (req, res) => {
   const body = req.body as Partial<LocalKbArticle>;
 
   if (!body.title || !body.title.trim()) {
@@ -1994,7 +2072,7 @@ app.post('/api/kb', (req, res) => {
 
   const now = new Date().toISOString();
   const newArticle: LocalKbArticle = {
-    id: body.id || `kb-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    id: body.id || `kb-${randomUUID()}`,
     title: body.title.trim(),
     slug: body.slug || slug,
     space: body.space || 'Runbooks & SOPs',
@@ -2019,7 +2097,7 @@ app.post('/api/kb', (req, res) => {
 });
 
 // Update article
-app.put('/api/kb/:id', (req, res) => {
+app.put('/api/kb/:id', requirePermission('kb:write'), (req, res) => {
   const { id } = req.params;
   const index = localKbDb.findIndex((a) => a.id === id || a.slug === id);
   if (index === -1) {
@@ -2042,7 +2120,7 @@ app.put('/api/kb/:id', (req, res) => {
 });
 
 // Delete article
-app.delete('/api/kb/:id', (req, res) => {
+app.delete('/api/kb/:id', requirePermission('kb:delete'), (req, res) => {
   const { id } = req.params;
   const initialLength = localKbDb.length;
   localKbDb = localKbDb.filter((a) => a.id !== id && a.slug !== id);

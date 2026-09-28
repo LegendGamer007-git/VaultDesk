@@ -18,6 +18,8 @@ import {
   User,
   Check,
   ChevronDown,
+  Download,
+  FileText,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 
@@ -239,6 +241,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               </svg>
             </button>
 
+            {/* Download README.md button */}
+            <a
+              href="/api/download/readme"
+              download="README.md"
+              title="Download GitHub README.md"
+              className="p-2 rounded-[10px] text-xs font-medium text-[#A6AEC0] hover:text-[#0A84FF] hover:bg-[#12151C] transition-colors flex items-center gap-1.5 border border-transparent hover:border-[#2E3440]"
+            >
+              <Download className="w-4 h-4 text-[#0A84FF]" />
+              <span className="hidden xl:inline text-[11px] font-semibold text-[#F5F6F8]">README.md</span>
+            </a>
+
             {/* Current User Profile Dropdown & Persona Switcher */}
             {currentUser && (
               <div className="relative">
@@ -342,6 +355,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <Users className="w-3.5 h-3.5 text-[#0A84FF]" />
                         <span>User Management & RBAC</span>
                       </button>
+
+                      <a
+                        href="/api/download/readme"
+                        download="README.md"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="w-full text-left px-2.5 py-1.5 rounded-[6px] text-xs text-[#0A84FF] hover:bg-[#1A1E27] flex items-center gap-2"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download README.md</span>
+                      </a>
 
                       {onLogout && (
                         <button

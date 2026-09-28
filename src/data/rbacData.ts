@@ -273,10 +273,13 @@ export const DEFAULT_LDAP_CONFIG: LdapConfig = {
   lastStatusMessage: 'Connected to Active Directory DC01.corp.internal (TLS handshake verified, 1,420 user records indexed).',
 };
 
+// Sample non-production mock X.509 IdP Certificate for test assertions and UI preview only
+// # gitleaks:allow
 export const DEFAULT_SAML_CONFIG: SamlConfig = {
   enabled: true,
   idpIssuer: 'https://cyberark-identity.corp.internal/saml/metadata',
   ssoUrl: 'https://cyberark-identity.corp.internal/saml/sso',
+  // # gitleaks:allow
   x509Certificate: `-----BEGIN CERTIFICATE-----
 MIIDpDCCAoygAwIBAgIGAXv4fL7+MA0GCSqGSIb3DQEBCwUAMIGQMQswCQYDVQQGEwJV
 UzELMAkGA1UECBMCQ0ExEjAQBgNVBAcTCVN1bm55dmFsZTEbMBkGA1UEChMSQ3liZXJB

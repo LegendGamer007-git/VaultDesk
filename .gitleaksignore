@@ -1,0 +1,3 @@
+# Gitleaks ignore file for false-positive mock fixtures
+src/data/rbacData.ts:DEFAULT_SAML_CONFIG
+src/data/rbacData.ts:x509Certificate

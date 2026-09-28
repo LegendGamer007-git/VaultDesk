@@ -221,10 +221,30 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     setTimeout(() => setNotification(null), 4000);
   };
 
+  // Sanitize HTML to eliminate Cross-Site Scripting (XSS / CWE-79)
+  const sanitizeHtmlOutput = (input: string): string => {
+    if (!input) return '';
+    let clean = input;
+    // 1. Strip dangerous executable tags
+    clean = clean.replace(/<\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)[^>]*>[\s\S]*?<\s*\/\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)\s*>/gi, '');
+    clean = clean.replace(/<\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)[^>]*\/?>/gi, '');
+    // 2. Strip malicious URI schemes (javascript:, vbscript:, data:text/html)
+    clean = clean.replace(/(href|src|action)\s*=\s*["']?\s*(?:javascript|vbscript|data:text\/html):[^"'>\s]*/gi, '$1="#"');
+    // 3. Strip all inline on* event handler attributes (onload, onerror, onclick, etc.)
+    clean = clean.replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+    return clean;
+  };
+
   // Convert markdown to clean HTML for visual editor and preview
   const markdownToHtml = (md: string): string => {
     if (!md) return '';
-    let html = md;
+    // Strip malicious script and object tags prior to conversion
+    let html = md
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+      .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+      .replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, '')
+      .replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
 
     // Code blocks ```lang ... ```
     html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_match, lang, code) => {
@@ -297,7 +317,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       })
       .join('\n');
 
-    return paragraphs;
+    return sanitizeHtmlOutput(paragraphs);
   };
 
   // Convert HTML back to clean Markdown

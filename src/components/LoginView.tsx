@@ -18,6 +18,8 @@ import {
   Layers,
   ChevronRight,
   ExternalLink,
+  Download,
+  FileText,
 } from 'lucide-react';
 import { UserProfile, UserRole } from '../types';
 
@@ -567,6 +569,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   <ChevronRight className="w-4 h-4 text-[#6E7787] group-hover:text-[#0A84FF] shrink-0 transition-colors" />
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* GitHub Documentation & README.md Download Link */}
+          <div className="pt-3 border-t border-[#232833]">
+            <div className="p-3 rounded-[10px] bg-[#12151C] border border-[#2E3440] flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-[#A6AEC0] min-w-0">
+                <FileText className="w-4 h-4 text-[#0A84FF] shrink-0" />
+                <span className="truncate">Need local setup & GitHub install docs?</span>
+              </div>
+              <a
+                href="/api/download/readme"
+                download="README.md"
+                className="px-2.5 py-1.5 rounded-[6px] bg-[#0A84FF]/10 hover:bg-[#0A84FF]/20 text-[#0A84FF] border border-[#0A84FF]/30 font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
+                title="Download formatted README.md for your GitHub repository"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download README.md</span>
+              </a>
             </div>
           </div>
         </div>
