@@ -25,9 +25,10 @@ import { UserProfile, UserRole } from '../types';
 
 interface LoginViewProps {
   onLoginSuccess: (user: UserProfile, token: string) => void;
+  onOpenReadme?: () => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenReadme }) => {
   const [authMethod, setAuthMethod] = useState<'local' | 'ldap' | 'saml' | 'invite'>('local');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -579,15 +580,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 <FileText className="w-4 h-4 text-[#0A84FF] shrink-0" />
                 <span className="truncate">Need local setup & GitHub install docs?</span>
               </div>
-              <a
-                href="/api/download/readme"
-                download="README.md"
-                className="px-2.5 py-1.5 rounded-[6px] bg-[#0A84FF]/10 hover:bg-[#0A84FF]/20 text-[#0A84FF] border border-[#0A84FF]/30 font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
-                title="Download formatted README.md for your GitHub repository"
+              <button
+                type="button"
+                onClick={onOpenReadme}
+                className="px-2.5 py-1.5 rounded-[6px] bg-[#0A84FF]/10 hover:bg-[#0A84FF]/20 text-[#0A84FF] border border-[#0A84FF]/30 font-semibold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+                title="View and download formatted README.md for your GitHub repository"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Download README.md</span>
-              </a>
+                <span>README & Guide</span>
+              </button>
             </div>
           </div>
         </div>

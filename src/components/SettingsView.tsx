@@ -6,6 +6,10 @@ import {
   Database,
   Check,
   Save,
+  FileText,
+  Download,
+  Github,
+  ExternalLink,
 } from 'lucide-react';
 import { PamComponent, UserPreferences } from '../types';
 
@@ -18,12 +22,14 @@ interface SettingsViewProps {
     advisoryCount: number;
     hasGeminiKey: boolean;
   };
+  onOpenReadme?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   preferences,
   onUpdatePreferences,
   apiStatus,
+  onOpenReadme,
 }) => {
   const [prefs, setPrefs] = useState<UserPreferences>({ ...preferences });
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -203,6 +209,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span className="px-2.5 py-0.5 rounded-full bg-[#101E26] text-[#64D2FF] border border-[#64D2FF]/30 text-[11px] font-semibold">
                 Gemini 3.8 Flash
               </span>
+            </div>
+          </div>
+        </div>
+
+        {/* GitHub README & Deployment Documentation */}
+        <div className="p-6 rounded-[14px] bg-[#12151C] border border-[#232833] space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-[8px] bg-[#238636]/15 border border-[#238636]/30 text-[#3FB950]">
+                <Github className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#F5F6F8]">
+                  GitHub Repository Documentation & Installation Guide
+                </h3>
+                <p className="text-xs text-[#A6AEC0]">
+                  Official <code className="text-[#0A84FF] font-mono font-semibold">README.md</code> with complete OS guides for Linux, Windows, macOS, Git clone, and security compliance.
+                </p>
+              </div>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full bg-[#238636]/20 text-[#3FB950] border border-[#238636]/30 text-[11px] font-semibold">
+              Root File Ready
+            </span>
+          </div>
+
+          <div className="p-4 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-[#F5F6F8] font-semibold">
+                <FileText className="w-4 h-4 text-[#0A84FF]" />
+                <span>README.md (576 lines • 24 KB • 0 Vulnerabilities)</span>
+              </div>
+              <p className="text-[11px] text-[#A6AEC0]">
+                Ready to sync with your GitHub repository or download directly to your local computer.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={onOpenReadme}
+                className="px-3.5 py-1.5 rounded-[8px] bg-[#238636] hover:bg-[#2EA043] text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>View & Copy Guide</span>
+              </button>
+
+              <a
+                href="/api/download/readme"
+                download="README.md"
+                className="px-3 py-1.5 rounded-[8px] bg-[#12151C] hover:bg-[#232833] border border-[#2E3440] text-[#0A84FF] font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                title="Download raw README.md file"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download .md</span>
+              </a>
             </div>
           </div>
         </div>

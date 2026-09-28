@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import {
@@ -43,7 +44,7 @@ app.use(express.json({ limit: '15mb' }));
 // Enhanced HTTP Security Headers (CWE-693)
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Allow framing from AI Studio preview while preserving anti-clickjacking
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   next();
@@ -195,16 +196,35 @@ app.get('/api/health', (req, res) => {
 });
 
 // Download and view README.md directly
+app.get('/api/readme', (_req, res) => {
+  try {
+    const readmePath = path.resolve(process.cwd(), 'README.md');
+    const content = fs.readFileSync(readmePath, 'utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json({
+      success: true,
+      content,
+      filename: 'README.md',
+      size: Buffer.byteLength(content, 'utf-8'),
+      updatedAt: fs.statSync(readmePath).mtime.toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to read README.md', details: err?.message });
+  }
+});
+
 app.get('/api/download/readme', (_req, res) => {
   const readmePath = path.resolve(process.cwd(), 'README.md');
   res.setHeader('Content-Type', 'text/markdown; charset=UTF-8');
   res.setHeader('Content-Disposition', 'attachment; filename="README.md"');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.sendFile(readmePath);
 });
 
 app.get('/README.md', (_req, res) => {
   const readmePath = path.resolve(process.cwd(), 'README.md');
   res.setHeader('Content-Type', 'text/markdown; charset=UTF-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.sendFile(readmePath);
 });
 

@@ -11,6 +11,7 @@ import { DiagnosticWizard } from './components/DiagnosticWizard';
 import { LocalKnowledgeBase } from './components/LocalKnowledgeBase';
 import { LoginView } from './components/LoginView';
 import { UserManagement } from './components/UserManagement';
+import { ReadmeModal } from './components/ReadmeModal';
 import {
   ErrorEntry,
   UpdateRelease,
@@ -82,6 +83,7 @@ export default function App() {
 
   const [selectedError, setSelectedError] = useState<ErrorEntry | null>(null);
   const [isBookmarksDrawerOpen, setIsBookmarksDrawerOpen] = useState(false);
+  const [isReadmeModalOpen, setIsReadmeModalOpen] = useState(false);
   const [lastSyncedTime, setLastSyncedTime] = useState<string>(new Date().toISOString());
   const [isAutoSyncingUpdates, setIsAutoSyncingUpdates] = useState(false);
 
@@ -538,7 +540,18 @@ export default function App() {
   }
 
   if (!currentUser || !authToken) {
-    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <>
+        <LoginView
+          onLoginSuccess={handleLoginSuccess}
+          onOpenReadme={() => setIsReadmeModalOpen(true)}
+        />
+        <ReadmeModal
+          isOpen={isReadmeModalOpen}
+          onClose={() => setIsReadmeModalOpen(false)}
+        />
+      </>
+    );
   }
 
   return (
@@ -558,6 +571,7 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         onSwitchDemoUser={handleSwitchDemoUser}
+        onOpenReadme={() => setIsReadmeModalOpen(true)}
       />
 
       {/* Main Content Area - 1440px container max */}
@@ -636,6 +650,7 @@ export default function App() {
             preferences={preferences}
             onUpdatePreferences={handleUpdatePreferences}
             apiStatus={apiStatus}
+            onOpenReadme={() => setIsReadmeModalOpen(true)}
           />
         )}
       </main>
@@ -695,6 +710,12 @@ export default function App() {
         bookmarks={bookmarks}
         onRemoveBookmark={handleRemoveBookmarkById}
         onSelectBookmark={handleSelectBookmarkEntry}
+      />
+
+      {/* GitHub README & OS Setup Guide Modal */}
+      <ReadmeModal
+        isOpen={isReadmeModalOpen}
+        onClose={() => setIsReadmeModalOpen(false)}
       />
     </div>
   );

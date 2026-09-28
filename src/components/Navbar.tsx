@@ -48,6 +48,7 @@ interface NavbarProps {
   currentUser?: UserProfile | null;
   onLogout?: () => void;
   onSwitchDemoUser?: (email: string) => void;
+  onOpenReadme?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -60,6 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onLogout,
   onSwitchDemoUser,
+  onOpenReadme,
 }) => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
@@ -241,16 +243,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               </svg>
             </button>
 
-            {/* Download README.md button */}
-            <a
-              href="/api/download/readme"
-              download="README.md"
-              title="Download GitHub README.md"
-              className="p-2 rounded-[10px] text-xs font-medium text-[#A6AEC0] hover:text-[#0A84FF] hover:bg-[#12151C] transition-colors flex items-center gap-1.5 border border-transparent hover:border-[#2E3440]"
+            {/* Download README.md & Guide Modal button */}
+            <button
+              onClick={onOpenReadme}
+              title="GitHub README.md, Download & OS Setup Guide"
+              className="p-2 rounded-[10px] text-xs font-medium text-[#A6AEC0] hover:text-[#0A84FF] hover:bg-[#12151C] transition-colors flex items-center gap-1.5 border border-transparent hover:border-[#2E3440] cursor-pointer"
             >
               <Download className="w-4 h-4 text-[#0A84FF]" />
               <span className="hidden xl:inline text-[11px] font-semibold text-[#F5F6F8]">README.md</span>
-            </a>
+            </button>
 
             {/* Current User Profile Dropdown & Persona Switcher */}
             {currentUser && (
@@ -356,15 +357,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <span>User Management & RBAC</span>
                       </button>
 
-                      <a
-                        href="/api/download/readme"
-                        download="README.md"
-                        onClick={() => setIsUserMenuOpen(false)}
-                        className="w-full text-left px-2.5 py-1.5 rounded-[6px] text-xs text-[#0A84FF] hover:bg-[#1A1E27] flex items-center gap-2"
+                      <button
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          if (onOpenReadme) onOpenReadme();
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-[6px] text-xs text-[#0A84FF] hover:bg-[#1A1E27] flex items-center gap-2 cursor-pointer"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        <span>Download README.md</span>
-                      </a>
+                        <span>GitHub README.md & Guide</span>
+                      </button>
 
                       {onLogout && (
                         <button
