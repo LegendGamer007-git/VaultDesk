@@ -376,12 +376,12 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     md = md.replace(/<br\s*\/?>/gi, '\n');
     md = md.replace(/<hr[^>]*>/gi, '---\n\n');
 
-    // Clean up entity encodes
+    // Clean up entity encodes (unescape &amp; LAST to prevent double unescaping)
     md = md
-      .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
-      .replace(/&nbsp;/g, ' ');
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&');
 
     return md.trim();
   };
@@ -742,15 +742,15 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   // 2. Export as PDF (Browser Clean Print Sheet)
   const handleExportPdf = () => {
     const renderedBodyHtml = markdownToHtml(content);
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Pop-up was blocked. Please allow pop-ups for PDF generation.');
-      return;
-    }
-
     const safePrintTitle = escapeHtml(title || 'Runbook');
-    const printHtml = `
-<!DOCTYPE html>
+    const safeSpace = escapeHtml(space);
+    const safeComponent = escapeHtml(component);
+    const safeSeverity = escapeHtml(severity);
+    const safeAuthor = escapeHtml(author);
+    const safeAuthorRole = escapeHtml(authorRole);
+    const safeSummary = escapeHtml(summary);
+
+    const printHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -861,12 +861,12 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   </style>
 </head>
 <body>
-  <h1>${title || 'CyberArk PAM Troubleshooting Runbook'}</h1>
+  <h1>${safePrintTitle}</h1>
   <div class="header-card">
-    <div><strong>Space:</strong> ${space} &nbsp;|&nbsp; <strong>Component:</strong> ${component} &nbsp;|&nbsp; <strong>Severity:</strong> ${severity}</div>
-    <div style="margin-top: 4px;"><strong>Author:</strong> ${author} (${authorRole}) &nbsp;|&nbsp; <strong>Generated:</strong> ${new Date().toLocaleString()}</div>
-    ${tags.length > 0 ? `<div style="margin-top: 4px;"><strong>Tags:</strong> ${tags.map((t) => `#${t}`).join(', ')}</div>` : ''}
-    ${summary ? `<div style="margin-top: 6px; color: #4b5563;"><em>${summary}</em></div>` : ''}
+    <div><strong>Space:</strong> ${safeSpace} &nbsp;|&nbsp; <strong>Component:</strong> ${safeComponent} &nbsp;|&nbsp; <strong>Severity:</strong> ${safeSeverity}</div>
+    <div style="margin-top: 4px;"><strong>Author:</strong> ${safeAuthor} (${safeAuthorRole}) &nbsp;|&nbsp; <strong>Generated:</strong> ${new Date().toLocaleString()}</div>
+    ${tags.length > 0 ? `<div style="margin-top: 4px;"><strong>Tags:</strong> ${tags.map((t) => `#${escapeHtml(t)}`).join(', ')}</div>` : ''}
+    ${safeSummary ? `<div style="margin-top: 6px; color: #4b5563;"><em>${safeSummary}</em></div>` : ''}
   </div>
 
   ${renderedBodyHtml}
@@ -875,34 +875,51 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     <span>VaultDesk Enterprise Knowledge Base</span>
     <span>Confidential - Internal Operations</span>
   </div>
-
-  <script>
-    window.onload = function() {
-      window.print();
-    };
-  </script>
 </body>
 </html>`;
 
-    printWindow.document.write(printHtml);
-    printWindow.document.close();
+    const blob = new Blob([printHtml], { type: 'text/html;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    const printIframe = document.createElement('iframe');
+    printIframe.style.position = 'fixed';
+    printIframe.style.right = '0';
+    printIframe.style.bottom = '0';
+    printIframe.style.width = '0';
+    printIframe.style.height = '0';
+    printIframe.style.border = '0';
+    printIframe.src = blobUrl;
+    document.body.appendChild(printIframe);
+    printIframe.onload = () => {
+      setTimeout(() => {
+        printIframe.contentWindow?.focus();
+        printIframe.contentWindow?.print();
+        setTimeout(() => {
+          if (document.body.contains(printIframe)) {
+            document.body.removeChild(printIframe);
+          }
+          URL.revokeObjectURL(blobUrl);
+        }, 2000);
+      }, 300);
+    };
+
     notify('Opened PDF Print Dialog. Select "Save as PDF"');
     setShowExportMenu(false);
   };
 
   // 3. Export as Markdown (.md)
   const handleExportMarkdown = () => {
+    const escapeYamlValue = (val: string) => (val || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     const frontmatter = `---
-title: "${title || 'Troubleshooting Runbook'}"
-space: "${space}"
-component: "${component}"
-severity: "${severity}"
-status: "${status}"
-author: "${author}"
-authorRole: "${authorRole}"
+title: "${escapeYamlValue(title || 'Troubleshooting Runbook')}"
+space: "${escapeYamlValue(space)}"
+component: "${escapeYamlValue(component)}"
+severity: "${escapeYamlValue(severity)}"
+status: "${escapeYamlValue(status)}"
+author: "${escapeYamlValue(author)}"
+authorRole: "${escapeYamlValue(authorRole)}"
 date: "${new Date().toISOString()}"
-tags: [${tags.map((t) => `"${t}"`).join(', ')}]
-summary: "${(summary || '').replace(/"/g, '\\"')}"
+tags: [${tags.map((t) => `"${escapeYamlValue(t)}"`).join(', ')}]
+summary: "${escapeYamlValue(summary || '')}"
 ---
 
 `;

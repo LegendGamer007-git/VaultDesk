@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { randomUUID, randomInt } from 'crypto';
+import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import {
   INITIAL_ERRORS,
@@ -39,7 +40,20 @@ import {
 const app = express();
 const PORT = 3000;
 
-const spaFallbackRateLimiter = rateLimit(100, 15 * 60 * 1000);
+// Standard Express Rate Limiting middleware (CWE-400 / CodeQL js/missing-rate-limiting)
+const createLimiter = (maxRequests = 40, windowMs = 60000) =>
+  rateLimit({
+    windowMs,
+    limit: maxRequests,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: 'Too many requests. Please wait a minute before making further requests.',
+    },
+  });
+
+const spaFallbackRateLimiter = createLimiter(100, 15 * 60 * 1000);
+const readmeLimiter = createLimiter(60, 60000);
 
 app.use(express.json({ limit: '15mb' }));
 
@@ -51,30 +65,6 @@ app.use((_req, res, next) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   next();
 });
-
-// In-memory rate limiter for sensitive authentication & AI routes (CWE-400)
-const requestRateMap = new Map<string, { count: number; resetAt: number }>();
-function rateLimit(maxRequests = 40, windowMs = 60000) {
-  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const clientKey = `${req.path}:${req.ip || req.socket.remoteAddress || 'client'}`;
-    const now = Date.now();
-    const entry = requestRateMap.get(clientKey);
-
-    if (!entry || now > entry.resetAt) {
-      requestRateMap.set(clientKey, { count: 1, resetAt: now + windowMs });
-      return next();
-    }
-
-    if (entry.count >= maxRequests) {
-      return res.status(429).json({
-        error: 'Too many requests. Please wait a minute before making further requests.',
-      });
-    }
-
-    entry.count++;
-    next();
-  };
-}
 
 // In-memory persistent state (seeded with authentic PAM knowledge base)
 let errorsDb: ErrorEntry[] = [...INITIAL_ERRORS];
@@ -179,7 +169,7 @@ function getAiClient(): GoogleGenAI | null {
 // ----------------------------------------------------
 
 // Global rate limiter applied to all /api endpoints (CWE-400 / CodeQL js/missing-rate-limiting)
-app.use('/api', rateLimit(120, 60000));
+app.use('/api', createLimiter(120, 60000));
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -201,7 +191,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Download and view README.md directly
-app.get('/api/readme', rateLimit(60, 60000), (_req, res) => {
+app.get('/api/readme', readmeLimiter, (_req, res) => {
   try {
     const readmePath = path.resolve(process.cwd(), 'README.md');
     const content = fs.readFileSync(readmePath, 'utf-8');
@@ -218,7 +208,7 @@ app.get('/api/readme', rateLimit(60, 60000), (_req, res) => {
   }
 });
 
-app.get('/api/download/readme', rateLimit(60, 60000), (_req, res) => {
+app.get('/api/download/readme', readmeLimiter, (_req, res) => {
   const readmePath = path.resolve(process.cwd(), 'README.md');
   res.setHeader('Content-Type', 'text/markdown; charset=UTF-8');
   res.setHeader('Content-Disposition', 'attachment; filename="README.md"');
@@ -226,7 +216,7 @@ app.get('/api/download/readme', rateLimit(60, 60000), (_req, res) => {
   res.sendFile(readmePath);
 });
 
-app.get('/README.md', rateLimit(60, 60000), (_req, res) => {
+app.get('/README.md', readmeLimiter, (_req, res) => {
   const readmePath = path.resolve(process.cwd(), 'README.md');
   res.setHeader('Content-Type', 'text/markdown; charset=UTF-8');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -237,7 +227,7 @@ app.get('/README.md', rateLimit(60, 60000), (_req, res) => {
 // AUTHENTICATION & SESSION ENDPOINTS
 // ----------------------------------------------------
 
-app.post('/api/auth/login', rateLimit(20, 60000), (req, res) => {
+app.post('/api/auth/login', createLimiter(20, 60000), (req, res) => {
   const { email, password, authMethod = 'local' } = req.body;
 
   if (authMethod === 'saml') {
@@ -494,7 +484,7 @@ app.post('/api/users/invite', requirePermission('users:invite'), (req, res) => {
   });
 });
 
-app.post('/api/users/invite/:token/accept', rateLimit(15, 60000), (req, res) => {
+app.post('/api/users/invite/:token/accept', createLimiter(15, 60000), (req, res) => {
   const { token } = req.params;
   const { name } = req.body;
 
@@ -1564,7 +1554,7 @@ Operational Analysis: ${matchedEntry.cause}`,
 }
 
 // Dedicated CyberArk Component Log Analyzer Endpoint (with random data anonymization & server save)
-app.post('/api/analyze-log', rateLimit(30, 60000), requirePermission('logs:analyze'), (req, res) => {
+app.post('/api/analyze-log', createLimiter(30, 60000), requirePermission('logs:analyze'), (req, res) => {
   const { logText, component, autoAnonymize, saveToServer, fileName } = req.body as {
     logText?: string;
     component?: string;
@@ -1654,7 +1644,7 @@ app.delete('/api/logs/saved/:id', (req, res) => {
 });
 
 // AI Search Grounding Endpoint (Gemini 3.8 Flash with Google Search Grounding & Resilient Fallback)
-app.post('/api/ai/diagnose', rateLimit(20, 60000), async (req, res) => {
+app.post('/api/ai/diagnose', createLimiter(20, 60000), async (req, res) => {
   const { query, component } = req.body as { query?: string; component?: string };
 
   if (!query || !query.trim()) {
