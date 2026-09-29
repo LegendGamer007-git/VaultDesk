@@ -2282,7 +2282,122 @@ app.delete('/api/connectors/:id', createLimiter(30, 60000), (req, res) => {
   res.json({ success: true, remaining: psmConnectorsDb.length });
 });
 
-// URL & DOM WebForm Fields Auto-Generator (SSRF-protected)
+// Helper: SSRF-Protected Live Login Page Fetcher
+async function fetchRealLoginPageHtml(targetUrlStr: string): Promise<{
+  ok: boolean;
+  html?: string;
+  statusCode?: number;
+  statusText?: string;
+  error?: string;
+}> {
+  let currentUrl: URL;
+  try {
+    currentUrl = new URL(targetUrlStr.startsWith('http') ? targetUrlStr : `https://${targetUrlStr}`);
+  } catch {
+    return { ok: false, error: 'Invalid URL format provided.' };
+  }
+
+  // Follow up to 3 redirects safely with re-validation on each hop
+  for (let redirectCount = 0; redirectCount < 4; redirectCount++) {
+    // 1. Enforce strict HTTP/HTTPS protocol
+    if (currentUrl.protocol !== 'http:' && currentUrl.protocol !== 'https:') {
+      return { ok: false, error: 'Only HTTP and HTTPS protocols are permitted.' };
+    }
+
+    // 2. Reject credentials in URL
+    if (currentUrl.username || currentUrl.password) {
+      return { ok: false, error: 'URLs with embedded credentials are not allowed.' };
+    }
+
+    const host = currentUrl.hostname.toLowerCase();
+
+    // 3. Strict hostname validations (no IP addresses, no loopbacks, no cloud metadata)
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (ipv4Regex.test(host)) {
+      return { ok: false, error: 'Direct numeric IP addresses are blocked (SSRF Protection). Please provide a valid domain name.' };
+    }
+
+    if (host.startsWith('[') || host.includes(':')) {
+      return { ok: false, error: 'Direct IPv6 addresses are blocked.' };
+    }
+
+    if (
+      host === 'localhost' ||
+      host.endsWith('.localhost') ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal') ||
+      host.endsWith('.corp') ||
+      host.endsWith('.lan') ||
+      host.endsWith('.home') ||
+      host === '169.254.169.254' ||
+      host === 'metadata.google.internal' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '::1'
+    ) {
+      return { ok: false, error: 'Access to loopback, internal, or cloud metadata domains is blocked (SSRF Protection).' };
+    }
+
+    // Hostname must be a valid FQDN
+    const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+    if (!domainRegex.test(host)) {
+      return { ok: false, error: 'Hostname must be a valid fully qualified domain name (e.g. app.example.com).' };
+    }
+
+    // 4. Perform bounded fetch with AbortController
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    try {
+      const response = await fetch(currentUrl.toString(), {
+        method: 'GET',
+        signal: controller.signal,
+        redirect: 'manual',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 VaultDesk-PSM-Inspector/2.0',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      // Handle redirect
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get('location');
+        if (!location) {
+          return { ok: false, error: `Redirect with status ${response.status} missing Location header.` };
+        }
+        currentUrl = new URL(location, currentUrl);
+        continue;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('text/html') && !contentType.includes('application/xhtml') && !contentType.includes('text/plain')) {
+        return { ok: false, statusCode: response.status, error: `Unsupported response Content-Type: ${contentType}. Expected HTML login page.` };
+      }
+
+      const text = await response.text();
+      const trimmedHtml = text.slice(0, 300000);
+      return {
+        ok: true,
+        html: trimmedHtml,
+        statusCode: response.status,
+        statusText: response.statusText,
+      };
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        return { ok: false, error: 'Request timed out while connecting to login URL (6s timeout limit).' };
+      }
+      return { ok: false, error: `Connection failed: ${err?.message || 'Network unreachable'}` };
+    }
+  }
+
+  return { ok: false, error: 'Too many redirects encountered (maximum 3).' };
+}
+
+// URL & DOM WebForm Fields Auto-Generator (Visits actual login URL with SSRF protection)
 app.post('/api/connectors/generate-webform', createLimiter(20, 60000), async (req, res) => {
   const { targetUrl, rawHtml } = req.body;
 
@@ -2290,51 +2405,61 @@ app.post('/api/connectors/generate-webform', createLimiter(20, 60000), async (re
     return res.status(400).json({ error: 'Target URL is required.' });
   }
 
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(targetUrl.startsWith('http') ? targetUrl : `https://${targetUrl}`);
-  } catch {
-    return res.status(400).json({ error: 'Invalid URL format.' });
+  let htmlToAnalyze = (rawHtml && typeof rawHtml === 'string') ? rawHtml.slice(0, 200000) : '';
+  let liveFetchStatus = 'HTML supplied via direct input';
+  let statusCode = 200;
+  const warnings: string[] = [];
+
+  // If no raw HTML was pasted, actually visit the live login URL in the backend
+  if (!htmlToAnalyze) {
+    const fetchResult = await fetchRealLoginPageHtml(targetUrl);
+    if (fetchResult.ok && fetchResult.html) {
+      htmlToAnalyze = fetchResult.html;
+      statusCode = fetchResult.statusCode || 200;
+      liveFetchStatus = `Successfully visited live URL (HTTP ${statusCode})`;
+    } else {
+      warnings.push(fetchResult.error || 'Live page fetch failed. Analyzed using domain template fallback.');
+      liveFetchStatus = `Live fetch fallback: ${fetchResult.error || 'Unreachable'}`;
+    }
   }
 
-  // Enforce http/https protocols only
-  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-    return res.status(400).json({ error: 'Only http and https protocols are supported.' });
+  // Parse the actual HTML DOM to extract real inputs, buttons, and validation targets
+  const analysisResult = analyzeHtmlForWebForms(htmlToAnalyze, targetUrl);
+  analysisResult.liveFetchStatus = liveFetchStatus;
+  analysisResult.statusCode = statusCode;
+  if (warnings.length > 0) {
+    analysisResult.securityWarnings = [...(analysisResult.securityWarnings || []), ...warnings];
   }
 
-  // SSRF Protection: Block cloud metadata and loopback addresses
-  const hostname = parsedUrl.hostname.toLowerCase();
-  if (
-    hostname === '169.254.169.254' ||
-    hostname === 'metadata.google.internal' ||
-    hostname === '127.0.0.1' ||
-    hostname === 'localhost' ||
-    hostname === '::1' ||
-    hostname === '0.0.0.0'
-  ) {
-    return res.status(400).json({
-      error: 'Security Policy Violation: Access to loopback or cloud metadata services is blocked (SSRF Protection).',
-    });
-  }
-
-  let htmlToAnalyze = (rawHtml && typeof rawHtml === 'string') ? rawHtml.slice(0, 100000) : '';
-
-  // Run DOM and heuristic analyzer (pure in-memory parsing without server-side outbound HTTP requests to prevent SSRF)
-  const analysisResult = analyzeHtmlForWebForms(htmlToAnalyze, parsedUrl.toString());
-
-  // If Gemini AI client is available, refine and enhance field suggestions based on URL patterns and HTML structure
+  // If Gemini AI client is available and we have HTML, run AI semantic analysis on real DOM elements
   const ai = getAiClient();
   if (ai && htmlToAnalyze) {
     try {
-      const prompt = `Analyze this web login page HTML and produce CyberArk PSM WebFormFields configuration.
-Target URL: ${parsedUrl.toString()}
-HTML Snippet:
-${htmlToAnalyze.slice(0, 3000)}
+      const prompt = `You are a CyberArk Privileged Access Management (PAM) Engineer.
+Analyze this REAL web application login page HTML to construct the exact CyberArk PSM WebFormFields sequence for PSM-WebApp Dispatcher.
 
-Output a concise JSON object with structure:
+Target URL: ${targetUrl}
+Page Title: ${analysisResult.pageTitle || 'Web Application'}
+
+REAL HTML SNIPPET (Extracted from live web page):
+${htmlToAnalyze.slice(0, 4500)}
+
+Instructions:
+1. Identify the REAL username/email input element (prefer 'id' or 'name' attribute).
+2. Identify the REAL password input element (prefer 'id' or 'name' attribute).
+3. Identify the REAL login/submit button (prefer 'id', 'name', or exact xpath).
+4. If there is an MFA/OTP prompt or remember me checkbox, add them with appropriate action type.
+5. Identify a post-login or header verification element for (Validation).
+6. Return a valid JSON object matching this schema:
 {
   "fields": [
-    { "target": "element-selector", "actionType": "username|password|button|validation|click", "value": "{Username}|{Password}|(Button)|(Validation)", "searchBy": "id|name|class|xpath" }
+    {
+      "target": "actual-selector-id-or-xpath",
+      "actionType": "username" | "password" | "button" | "click" | "validation" | "wait",
+      "value": "{Username}" | "{Password}" | "(Button)" | "(Validation)" | "(Click)",
+      "searchBy": "id" | "name" | "class" | "xpath" | "css",
+      "comment": "Description of the actual element"
+    }
   ]
 }`;
 
@@ -2349,20 +2474,21 @@ Output a concise JSON object with structure:
 
       if (aiResponse.text) {
         const parsedAi = JSON.parse(aiResponse.text);
-        if (Array.isArray(parsedAi.fields) && parsedAi.fields.length > 0) {
+        if (Array.isArray(parsedAi.fields) && parsedAi.fields.length >= 2) {
           analysisResult.fields = parsedAi.fields.map((f: any, idx: number) => ({
-            id: `ai-field-${randomUUID().slice(0, 8)}`,
+            id: `real-ai-field-${randomUUID().slice(0, 8)}`,
             target: String(f.target || 'input'),
-            actionType: f.actionType || 'username',
+            actionType: f.actionType || (idx === 0 ? 'username' : idx === 1 ? 'password' : 'button'),
             value: String(f.value || '{Username}'),
             searchBy: f.searchBy || 'id',
-            comment: `AI-inferred ${f.actionType} element`,
+            comment: f.comment || `Real element extracted from live DOM`,
+            confidence: 'high',
           }));
-          analysisResult.analysisMethod = 'gemini_ai';
+          analysisResult.analysisMethod = 'live_fetch';
         }
       }
     } catch {
-      // Keep heuristic result on AI timeout
+      // Keep real DOM heuristic result on AI timeout
     }
   }
 

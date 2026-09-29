@@ -637,31 +637,45 @@ ${webFormFields}
             {/* Generated Analysis Results */}
             {analysisResult && (
               <div className="bg-[#12151C] border border-[#2E3440] rounded-2xl p-6 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#232833]">
                   <div className="flex items-center gap-2">
                     <div className="p-1.5 rounded-lg bg-[#30D158]/10 text-[#30D158]">
                       <FileCheck className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-[#F5F6F8]">
-                        Discovered WebForm Fields ({analysisResult.fields.length} steps)
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-[#F5F6F8]">
+                          Live WebForm Inspection Results ({analysisResult.fields.length} steps)
+                        </h3>
+                        {analysisResult.liveFetchStatus && (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
+                            analysisResult.statusCode === 200
+                              ? 'bg-[#12241A] text-[#30D158] border border-[#30D158]/30'
+                              : 'bg-[#2A1E14] text-[#FF9F0A] border border-[#FF9F0A]/30'
+                          }`}>
+                            {analysisResult.liveFetchStatus}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-[#A6AEC0]">
-                        Analysis Method: <span className="text-[#64D2FF] font-medium">{analysisResult.analysisMethod}</span>
+                        Page Title: <strong className="text-[#64D2FF]">{analysisResult.pageTitle || 'Web Application Login'}</strong>
+                        {analysisResult.detectedInputsCount !== undefined && (
+                          <span> • Found {analysisResult.detectedInputsCount} input(s) and {analysisResult.detectedButtonsCount || 0} button(s)</span>
+                        )}
                       </p>
                     </div>
                   </div>
 
                   <button
                     onClick={handleApplyAnalysisToConnector}
-                    className="px-4 py-2 rounded-xl bg-[#30D158] hover:bg-[#28B84D] text-[#0B0E14] font-bold text-xs shadow-lg shadow-[#30D158]/20 flex items-center gap-1.5 cursor-pointer transition-all"
+                    className="px-4 py-2 rounded-xl bg-[#30D158] hover:bg-[#28B84D] text-[#0B0E14] font-bold text-xs shadow-lg shadow-[#30D158]/20 flex items-center gap-1.5 cursor-pointer transition-all flex-shrink-0"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Create & Edit Connector</span>
                   </button>
                 </div>
 
-                {/* Discovered Form Fields Table */}
+                {/* Discovered Form Fields Table with Real DOM Snippets */}
                 <div className="overflow-x-auto rounded-xl border border-[#232833]">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[#1A1E27] text-[#A6AEC0] uppercase font-mono text-[10px] border-b border-[#232833]">
@@ -671,6 +685,7 @@ ${webFormFields}
                         <th className="p-3">Target Selector</th>
                         <th className="p-3">Search By</th>
                         <th className="p-3">Injected Value</th>
+                        <th className="p-3">Matched DOM Element</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#232833] font-mono">
@@ -690,7 +705,16 @@ ${webFormFields}
                           </td>
                           <td className="p-3 text-[#F5F6F8] font-bold">{f.target}</td>
                           <td className="p-3 text-[#A6AEC0]">searchby={f.searchBy}</td>
-                          <td className="p-3 text-[#64D2FF]">{f.value}</td>
+                          <td className="p-3 text-[#64D2FF] font-semibold">{f.value}</td>
+                          <td className="p-3 max-w-xs truncate text-[11px] text-[#A6AEC0]" title={f.elementSnippet || f.comment}>
+                            {f.elementSnippet ? (
+                              <code className="text-[#30D158] bg-[#0B0E14] px-1.5 py-0.5 rounded border border-[#232833] font-mono text-[10px]">
+                                {f.elementSnippet}
+                              </code>
+                            ) : (
+                              <span className="text-[#6E7787] italic">{f.comment || 'Inferred target element'}</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -713,6 +737,19 @@ ${webFormFields}
                     {generateCyberArkWebFormFieldsText(analysisResult.fields)}
                   </pre>
                 </div>
+
+                {/* Raw HTML DOM Snippet Inspector */}
+                {analysisResult.rawHtmlSnippet && (
+                  <details className="p-3 rounded-xl bg-[#0B0E14] border border-[#232833] text-xs">
+                    <summary className="font-mono text-[11px] text-[#64D2FF] cursor-pointer font-semibold flex items-center justify-between">
+                      <span>Inspect Raw Live HTML DOM Snippet</span>
+                      <Eye className="w-3.5 h-3.5" />
+                    </summary>
+                    <pre className="mt-2 p-3 bg-[#12151C] rounded-lg text-[11px] text-[#A6AEC0] font-mono whitespace-pre-wrap max-h-48 overflow-y-auto border border-[#232833]">
+                      {analysisResult.rawHtmlSnippet}
+                    </pre>
+                  </details>
+                )}
               </div>
             )}
           </div>

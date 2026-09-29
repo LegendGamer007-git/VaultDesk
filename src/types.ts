@@ -330,6 +330,8 @@ export interface WebFormField {
   searchBy: WebFormFieldSearchBy;
   comment?: string;
   optional?: boolean;
+  elementSnippet?: string;
+  confidence?: 'high' | 'medium' | 'low';
 }
 
 export interface PsmWebConnector {
@@ -367,5 +369,9 @@ export interface WebFormAnalysisResult {
   analysisMethod: 'live_fetch' | 'gemini_ai' | 'heuristic_parser' | 'template_match';
   securityWarnings: string[];
   rawHtmlSnippet?: string;
+  statusCode?: number;
+  liveFetchStatus?: string;
+  detectedInputsCount?: number;
+  detectedButtonsCount?: number;
 }
 

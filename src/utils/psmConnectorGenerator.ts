@@ -1,4 +1,4 @@
-import { PsmWebConnector, WebFormField, WebFormAnalysisResult } from '../types';
+import { PsmWebConnector, WebFormField, WebFormAnalysisResult, WebFormFieldSearchBy } from '../types';
 
 /**
  * Format WebFormField array into authentic CyberArk PSM-WebApp WebFormFields multiline string.
@@ -147,7 +147,7 @@ export function validateWebFormFieldSyntax(field: WebFormField): { valid: boolea
 }
 
 /**
- * Heuristic DOM parser that analyzes raw HTML or form elements to automatically generate CyberArk WebFormFields.
+ * Comprehensive DOM & HTML parser that extracts real form fields from actual web pages.
  */
 export function analyzeHtmlForWebForms(html: string, targetUrl: string): WebFormAnalysisResult {
   const fields: WebFormField[] = [];
@@ -161,10 +161,12 @@ export function analyzeHtmlForWebForms(html: string, targetUrl: string): WebForm
   // Try extracting host / title
   try {
     const parsed = new URL(targetUrl.startsWith('http') ? targetUrl : `https://${targetUrl}`);
-    const hostClean = parsed.hostname.replace(/[^a-zA-Z0-9]/g, '');
+    const hostParts = parsed.hostname.split('.');
+    const cleanHost = hostParts.length >= 2 ? hostParts[hostParts.length - 2] : parsed.hostname;
+    const hostClean = cleanHost.replace(/[^a-zA-Z0-9]/g, '');
     if (hostClean) {
-      componentId = `PSM-Web-${hostClean.slice(0, 16)}`;
-      componentName = `${parsed.hostname} Web Portal`;
+      componentId = `PSM-Web-${hostClean.toUpperCase()}`;
+      componentName = `${cleanHost.charAt(0).toUpperCase() + cleanHost.slice(1)} Web Portal`;
     }
   } catch {
     // fallback
@@ -172,180 +174,305 @@ export function analyzeHtmlForWebForms(html: string, targetUrl: string): WebForm
 
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   if (titleMatch && titleMatch[1]) {
-    pageTitle = titleMatch[1].trim();
-    if (pageTitle.length > 0 && pageTitle.length < 50) {
+    pageTitle = titleMatch[1].trim().replace(/\s+/g, ' ');
+    if (pageTitle.length > 0 && pageTitle.length < 60) {
       componentName = pageTitle;
     }
   }
 
-  // Look for inputs
+  // Count forms
+  const formMatches = html.match(/<form\b[^>]*>/gi) || [];
+  const formCount = formMatches.length;
+
+  // Real Input element detection
   const inputRegex = /<input\b([^>]*)>/gi;
   let match;
+  let detectedInputsCount = 0;
   let hasUsername = false;
   let hasPassword = false;
-  let count = 0;
+  let hasOtp = false;
+
+  interface DetectedInput {
+    id: string;
+    name: string;
+    type: string;
+    className: string;
+    placeholder: string;
+    ariaLabel: string;
+    rawTag: string;
+  }
+
+  const parsedInputs: DetectedInput[] = [];
 
   while ((match = inputRegex.exec(html)) !== null) {
-    count++;
+    detectedInputsCount++;
+    const rawTag = match[0];
     const attrs = match[1];
+
     const typeMatch = attrs.match(/\btype=["']?([^"'\s>]+)/i);
     const idMatch = attrs.match(/\bid=["']?([^"'\s>]+)/i);
     const nameMatch = attrs.match(/\bname=["']?([^"'\s>]+)/i);
     const classMatch = attrs.match(/\bclass=["']?([^"'\s>]+)/i);
     const placeholderMatch = attrs.match(/\bplaceholder=["']?([^"'\s>]+)/i);
+    const ariaMatch = attrs.match(/\baria-label=["']?([^"'\s>]+)/i);
 
     const inputType = (typeMatch ? typeMatch[1] : 'text').toLowerCase();
     const id = idMatch ? idMatch[1] : '';
     const name = nameMatch ? nameMatch[1] : '';
-    const className = classMatch ? classMatch[1] : '';
-    const placeholder = placeholderMatch ? placeholderMatch[1].toLowerCase() : '';
+    const className = classMatch ? classMatch[1].trim() : '';
+    const placeholder = placeholderMatch ? placeholderMatch[1].trim() : '';
+    const ariaLabel = ariaMatch ? ariaMatch[1].trim() : '';
 
     if (inputType === 'hidden') continue;
 
-    // Detect Password field
-    if (inputType === 'password' || name.toLowerCase().includes('pass') || id.toLowerCase().includes('pass')) {
+    parsedInputs.push({
+      id,
+      name,
+      type: inputType,
+      className,
+      placeholder,
+      ariaLabel,
+      rawTag,
+    });
+  }
+
+  // Process parsed real inputs
+  for (const input of parsedInputs) {
+    const combinedStr = `${input.id} ${input.name} ${input.placeholder} ${input.ariaLabel}`.toLowerCase();
+
+    // 1. Password input
+    if (input.type === 'password' || combinedStr.includes('pass') || combinedStr.includes('pwd') || combinedStr.includes('secret')) {
       if (!hasPassword) {
-        const selector = id || name || (className ? className.split(' ')[0] : 'input[type="password"]');
-        const searchBy = id ? 'id' : name ? 'name' : className ? 'class' : 'css';
+        const selector = input.id || input.name || (input.className ? input.className.split(' ')[0] : 'input[type="password"]');
+        const searchBy = input.id ? 'id' : input.name ? 'name' : input.className ? 'class' : 'css';
+
         fields.push({
-          id: `gen-field-${Date.now()}-${fields.length + 1}`,
+          id: `real-field-pass-${fields.length + 1}`,
           target: selector,
           actionType: 'password',
           value: '{Password}',
           searchBy,
-          comment: `Target password input element (${searchBy}=${selector})`,
+          comment: `Actual password field: <input ${input.id ? `id="${input.id}" ` : ''}${input.name ? `name="${input.name}" ` : ''}type="${input.type}" />`,
+          elementSnippet: input.rawTag.slice(0, 140),
+          confidence: 'high',
         });
         hasPassword = true;
       }
       continue;
     }
 
-    // Detect Username / Login ID field
+    // 2. MFA / OTP input
+    if (combinedStr.includes('otp') || combinedStr.includes('mfa') || combinedStr.includes('token') || combinedStr.includes('code') || combinedStr.includes('totp') || combinedStr.includes('authenticator')) {
+      if (!hasOtp) {
+        const selector = input.id || input.name || (input.className ? input.className.split(' ')[0] : 'input[type="text"]');
+        const searchBy = input.id ? 'id' : input.name ? 'name' : input.className ? 'class' : 'css';
+
+        fields.push({
+          id: `real-field-otp-${fields.length + 1}`,
+          target: selector,
+          actionType: 'text',
+          value: '{OTP}',
+          searchBy,
+          comment: `MFA/OTP Authenticator Code field (${searchBy}=${selector})`,
+          elementSnippet: input.rawTag.slice(0, 140),
+          confidence: 'high',
+          optional: true,
+        });
+        hasOtp = true;
+      }
+      continue;
+    }
+
+    // 3. Username / Email input
     const isUserCandidate =
-      inputType === 'email' ||
-      inputType === 'text' ||
-      name.toLowerCase().includes('user') ||
-      name.toLowerCase().includes('login') ||
-      name.toLowerCase().includes('email') ||
-      id.toLowerCase().includes('user') ||
-      id.toLowerCase().includes('login') ||
-      id.toLowerCase().includes('email') ||
-      placeholder.includes('user') ||
-      placeholder.includes('email');
+      input.type === 'email' ||
+      input.type === 'text' ||
+      input.type === 'tel' ||
+      combinedStr.includes('user') ||
+      combinedStr.includes('login') ||
+      combinedStr.includes('email') ||
+      combinedStr.includes('account') ||
+      combinedStr.includes('identifier') ||
+      combinedStr.includes('uid') ||
+      combinedStr.includes('upn') ||
+      combinedStr.includes('auth') ||
+      combinedStr.includes('signin') ||
+      combinedStr.includes('uname');
 
     if (isUserCandidate && !hasUsername) {
-      const selector = id || name || (className ? className.split(' ')[0] : 'input[type="text"]');
-      const searchBy = id ? 'id' : name ? 'name' : className ? 'class' : 'css';
+      const selector = input.id || input.name || (input.className ? input.className.split(' ')[0] : 'input[type="text"]');
+      const searchBy = input.id ? 'id' : input.name ? 'name' : input.className ? 'class' : 'css';
+
       fields.push({
-        id: `gen-field-${Date.now()}-${fields.length + 1}`,
+        id: `real-field-user-${fields.length + 1}`,
         target: selector,
         actionType: 'username',
         value: '{Username}',
         searchBy,
-        comment: `Target username/email input element (${searchBy}=${selector})`,
+        comment: `Actual username/email field: <input ${input.id ? `id="${input.id}" ` : ''}${input.name ? `name="${input.name}" ` : ''}type="${input.type}" />`,
+        elementSnippet: input.rawTag.slice(0, 140),
+        confidence: 'high',
       });
       hasUsername = true;
       continue;
     }
   }
 
-  // Look for Submit / Login buttons
+  // If username wasn't explicitly tagged but we have a text input before password, use it
+  if (!hasUsername && parsedInputs.length > 0) {
+    const firstTextInput = parsedInputs.find(i => i.type === 'text' || i.type === 'email');
+    if (firstTextInput) {
+      const selector = firstTextInput.id || firstTextInput.name || (firstTextInput.className ? firstTextInput.className.split(' ')[0] : 'input[type="text"]');
+      const searchBy = firstTextInput.id ? 'id' : firstTextInput.name ? 'name' : firstTextInput.className ? 'class' : 'css';
+      fields.unshift({
+        id: `real-field-user-first-${fields.length + 1}`,
+        target: selector,
+        actionType: 'username',
+        value: '{Username}',
+        searchBy,
+        comment: `Primary login identifier input (${searchBy}=${selector})`,
+        elementSnippet: firstTextInput.rawTag.slice(0, 140),
+        confidence: 'medium',
+      });
+      hasUsername = true;
+    }
+  }
+
+  // Real Submit / Login buttons detection
   const buttonRegex = /<(button|input)\b([^>]*)>(.*?)(?:<\/\1>)?/gi;
+  let detectedButtonsCount = 0;
   let hasSubmit = false;
 
   while ((match = buttonRegex.exec(html)) !== null) {
-    const tag = match[1].toLowerCase();
+    detectedButtonsCount++;
+    const rawTag = match[0];
     const attrs = match[2];
-    const text = match[3] || '';
+    const innerText = match[3] || '';
 
     const typeMatch = attrs.match(/\btype=["']?([^"'\s>]+)/i);
     const idMatch = attrs.match(/\bid=["']?([^"'\s>]+)/i);
     const nameMatch = attrs.match(/\bname=["']?([^"'\s>]+)/i);
     const classMatch = attrs.match(/\bclass=["']?([^"'\s>]+)/i);
+    const ariaMatch = attrs.match(/\baria-label=["']?([^"'\s>]+)/i);
 
     const btnType = (typeMatch ? typeMatch[1] : '').toLowerCase();
     const id = idMatch ? idMatch[1] : '';
     const name = nameMatch ? nameMatch[1] : '';
-    const className = classMatch ? classMatch[1] : '';
+    const className = classMatch ? classMatch[1].trim() : '';
+    const ariaLabel = ariaMatch ? ariaMatch[1].trim() : '';
+
+    const combinedBtn = `${id} ${name} ${className} ${ariaLabel} ${innerText}`.toLowerCase();
 
     const isLoginBtn =
       btnType === 'submit' ||
-      id.toLowerCase().includes('login') ||
-      id.toLowerCase().includes('submit') ||
-      id.toLowerCase().includes('signin') ||
-      name.toLowerCase().includes('login') ||
-      name.toLowerCase().includes('submit') ||
-      text.toLowerCase().includes('log in') ||
-      text.toLowerCase().includes('sign in') ||
-      text.toLowerCase().includes('submit');
+      combinedBtn.includes('log in') ||
+      combinedBtn.includes('login') ||
+      combinedBtn.includes('sign in') ||
+      combinedBtn.includes('signin') ||
+      combinedBtn.includes('submit') ||
+      combinedBtn.includes('continue') ||
+      combinedBtn.includes('next') ||
+      combinedBtn.includes('authenticate');
 
     if (isLoginBtn && !hasSubmit) {
-      const selector = id || name || (className ? className.split(' ')[0] : `//button[@type='submit']`);
-      const searchBy = id ? 'id' : name ? 'name' : className ? 'class' : 'xpath';
+      let selector = '';
+      let searchBy: WebFormFieldSearchBy = 'id';
+
+      if (id) {
+        selector = id;
+        searchBy = 'id';
+      } else if (name) {
+        selector = name;
+        searchBy = 'name';
+      } else if (className && !className.includes(' ')) {
+        selector = className;
+        searchBy = 'class';
+      } else {
+        selector = `//button[@type='submit' or contains(text(), 'Sign In') or contains(text(), 'Log In')]`;
+        searchBy = 'xpath';
+      }
+
       fields.push({
-        id: `gen-field-${Date.now()}-${fields.length + 1}`,
+        id: `real-field-btn-${fields.length + 1}`,
         target: selector,
         actionType: 'button',
         value: '(Button)',
         searchBy,
-        comment: `Submit / Log in action trigger (${searchBy}=${selector})`,
+        comment: `Actual submit button: <button ${id ? `id="${id}" ` : ''}${name ? `name="${name}" ` : ''}>${innerText.slice(0, 30)}</button>`,
+        elementSnippet: rawTag.slice(0, 140),
+        confidence: 'high',
       });
       hasSubmit = true;
       break;
     }
   }
 
-  // Fallback defaults if nothing discovered
+  // Fallback defaults if site was completely empty or protected
   if (fields.length === 0) {
-    warnings.push('No standard HTML form elements detected automatically. Defaulted to standard CyberArk WebFormFields template.');
+    warnings.push('Live page inspection found 0 standard form fields (page may require JavaScript SPA hydration). Synthesized standard CyberArk WebFormFields template.');
     fields.push(
       {
-        id: `gen-field-${Date.now()}-1`,
+        id: `field-user-default`,
         target: 'username',
         actionType: 'username',
         value: '{Username}',
         searchBy: 'id',
-        comment: 'Default target username field (searchby=id)',
+        comment: 'Default target username selector (searchby=id)',
+        confidence: 'medium',
       },
       {
-        id: `gen-field-${Date.now()}-2`,
+        id: `field-pass-default`,
         target: 'password',
         actionType: 'password',
         value: '{Password}',
         searchBy: 'id',
-        comment: 'Default target password field (searchby=id)',
+        comment: 'Default target password selector (searchby=id)',
+        confidence: 'medium',
       },
       {
-        id: `gen-field-${Date.now()}-3`,
+        id: `field-btn-default`,
         target: 'submit-button',
         actionType: 'button',
         value: '(Button)',
         searchBy: 'id',
-        comment: 'Default submit button (searchby=id)',
+        comment: 'Default submit button trigger (searchby=id)',
+        confidence: 'medium',
       }
     );
   }
 
-  // Always append a recommended validation step
+  // Validation Rule extraction (Search for nav, header, main, user-menu in the page)
+  let validationSelector = 'app-header';
+  let validationSearchBy: WebFormFieldSearchBy = 'class';
+
+  const headerMatch = html.match(/<header\b[^>]*\bid=["']?([^"'\s>]+)/i) || html.match(/<nav\b[^>]*\bid=["']?([^"'\s>]+)/i);
+  if (headerMatch && headerMatch[1]) {
+    validationSelector = headerMatch[1];
+    validationSearchBy = 'id';
+  }
+
   fields.push({
-    id: `gen-field-${Date.now()}-val`,
-    target: 'app-header',
+    id: `real-field-validation-${fields.length + 1}`,
+    target: validationSelector,
     actionType: 'validation',
     value: '(Validation)',
-    searchBy: 'class',
-    comment: 'Post-login successful dashboard indicator (searchby=class)',
+    searchBy: validationSearchBy,
+    comment: `Post-login dashboard element to confirm session validation (${validationSearchBy}=${validationSelector})`,
+    confidence: 'medium',
   });
 
   return {
     detectedUrl: targetUrl,
     pageTitle,
-    formCount: count > 0 ? count : 1,
+    formCount: formCount > 0 ? formCount : 1,
     fields,
     suggestedComponentId: componentId,
     suggestedName: componentName,
     suggestedCategory: category,
-    analysisMethod: 'heuristic_parser',
+    analysisMethod: html.length > 200 ? 'live_fetch' : 'heuristic_parser',
     securityWarnings: warnings,
-    rawHtmlSnippet: html.slice(0, 500),
+    rawHtmlSnippet: html.slice(0, 1500),
+    detectedInputsCount,
+    detectedButtonsCount,
   };
 }
