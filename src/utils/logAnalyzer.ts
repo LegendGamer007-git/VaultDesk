@@ -1,6 +1,21 @@
 import { PamComponent, SeverityLevel, ErrorEntry } from '../types';
 import { COMMUNITY_KB_ARTICLES } from '../data/communityArticles';
 import { INITIAL_ERRORS } from '../data/pamData';
+// Secure random helper for anonymization (CWE-338 / CodeQL secure randomness)
+function getSecureRandom(min: number, max: number): number {
+  try {
+    const array = new Uint32Array(1);
+    if (typeof window !== 'undefined' && window.crypto) {
+      window.crypto.getRandomValues(array);
+    } else if (typeof globalThis !== 'undefined' && globalThis.crypto) {
+      globalThis.crypto.getRandomValues(array);
+    }
+    const val = array[0] / 4294967296;
+    return Math.floor(min + val * (max - min));
+  } catch {
+    return Math.floor(min + Math.random() * (max - min));
+  }
+}
 
 export interface ParsedLogLine {
   lineNumber: number;
@@ -142,8 +157,8 @@ export function sanitizeCustomerSecurityLog(rawLog: string): SanitizedLogResult 
     if (ip === '127.0.0.1' || ip === '0.0.0.0') return ip;
     if (!ipMap.has(ip)) {
       ipsMasked++;
-      const octet3 = Math.floor(10 + Math.random() * 200);
-      const octet4 = Math.floor(2 + Math.random() * 250);
+      const octet3 = getSecureRandom(10, 210);
+      const octet4 = getSecureRandom(2, 252);
       const synthIp = ip.startsWith('192.168.')
         ? `192.168.${octet3}.${octet4}`
         : ip.startsWith('172.')
@@ -181,8 +196,8 @@ export function sanitizeCustomerSecurityLog(rawLog: string): SanitizedLogResult 
     if (!userMap.has(username)) {
       usersMasked++;
       const synthUser = username.includes('\\')
-        ? `CORP_ANON\\user_synth_${Math.floor(100 + Math.random() * 900)}`
-        : `user_synth_${Math.floor(100 + Math.random() * 900)}`;
+        ? `CORP_ANON\\user_synth_${getSecureRandom(100, 1000)}`
+        : `user_synth_${getSecureRandom(100, 1000)}`;
       userMap.set(username, synthUser);
       replacements.push({ original: username, replacement: synthUser, type: 'User Account' });
     }
@@ -201,7 +216,7 @@ export function sanitizeCustomerSecurityLog(rawLog: string): SanitizedLogResult 
     }
     if (!hostMap.has(hostname)) {
       hostsMasked++;
-      const synthHost = `host-edge-${Math.floor(100 + Math.random() * 900)}.synth.local`;
+      const synthHost = `host-edge-${getSecureRandom(100, 1000)}.synth.local`;
       hostMap.set(hostname, synthHost);
       replacements.push({ original: hostname, replacement: synthHost, type: 'Target Host / FQDN' });
     }

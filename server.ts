@@ -198,7 +198,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Download and view README.md directly
-app.get('/api/readme', (_req, res) => {
+app.get('/api/readme', rateLimit(60, 60000), (_req, res) => {
   try {
     const readmePath = path.resolve(process.cwd(), 'README.md');
     const content = fs.readFileSync(readmePath, 'utf-8');
@@ -215,7 +215,7 @@ app.get('/api/readme', (_req, res) => {
   }
 });
 
-app.get('/api/download/readme', (_req, res) => {
+app.get('/api/download/readme', rateLimit(60, 60000), (_req, res) => {
   const readmePath = path.resolve(process.cwd(), 'README.md');
   res.setHeader('Content-Type', 'text/markdown; charset=UTF-8');
   res.setHeader('Content-Disposition', 'attachment; filename="README.md"');
@@ -223,7 +223,7 @@ app.get('/api/download/readme', (_req, res) => {
   res.sendFile(readmePath);
 });
 
-app.get('/README.md', (_req, res) => {
+app.get('/README.md', rateLimit(60, 60000), (_req, res) => {
   const readmePath = path.resolve(process.cwd(), 'README.md');
   res.setHeader('Content-Type', 'text/markdown; charset=UTF-8');
   res.setHeader('Access-Control-Allow-Origin', '*');
