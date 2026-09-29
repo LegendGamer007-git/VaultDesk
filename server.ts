@@ -2367,6 +2367,43 @@ const BLOCKED_HOST_SET = new Set([
   'instance-data',
 ]);
 
+const APPROVED_ENTERPRISE_HOSTS = [
+  'signin.aws.amazon.com',
+  'console.aws.amazon.com',
+  'portal.azure.com',
+  'login.microsoftonline.com',
+  'accounts.google.com',
+  'github.com',
+  'gitlab.com',
+  'login.salesforce.com',
+  'httpbin.org',
+  'cyberark.com',
+  'service-now.com',
+  'atlassian.net',
+  'okta.com',
+  'vmware.com',
+  'oracle.com',
+  'splunk.com',
+  'workday.com',
+  'slack.com',
+  'zoom.us',
+  'zendesk.com',
+];
+
+const APPROVED_HOSTS_SET = new Set(APPROVED_ENTERPRISE_HOSTS);
+
+function isApprovedTargetHost(hostname: string): boolean {
+  if (APPROVED_HOSTS_SET.has(hostname)) {
+    return true;
+  }
+  for (const domain of APPROVED_ENTERPRISE_HOSTS) {
+    if (hostname.endsWith('.' + domain)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const SAFE_DOMAIN_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,24}$/;
 
 async function validateUrlForSsrf(targetUrl: string): Promise<{ valid: boolean; reason?: string; safeUrl?: string }> {
@@ -2392,6 +2429,14 @@ async function validateUrlForSsrf(targetUrl: string): Promise<{ valid: boolean; 
       cleanHostname.endsWith('.local')
     ) {
       return { valid: false, reason: `Target host '${cleanHostname}' is restricted by PAM SSRF security policy.` };
+    }
+
+    // Host allowlist validation (CWE-918 / js/request-forgery sanitizer)
+    if (!isApprovedTargetHost(cleanHostname)) {
+      return {
+        valid: false,
+        reason: `Target host '${cleanHostname}' is outside pre-approved PAM scanner list. To inspect, paste HTML in DOM Inspector tab (CWE-918).`,
+      };
     }
 
     // Domain regex pattern validation
