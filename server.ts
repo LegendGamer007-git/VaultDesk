@@ -2368,6 +2368,7 @@ const BLOCKED_HOST_SET = new Set([
 ]);
 
 const INITIAL_APPROVED_DOMAINS = [
+  'login.wordpress.org',
   'wordpress.org',
   'wordpress.com',
   'signin.aws.amazon.com',
@@ -2558,7 +2559,11 @@ async function fetchRealLoginPageHtml(
     const parsed = new URL(currentUrl);
     const hostToCheck = parsed.hostname.toLowerCase().trim();
 
-    if (!isApprovedTargetHost(hostToCheck)) {
+    const approvedDomain = customApprovedDomainsDb.find(
+      (d) => hostToCheck === d || hostToCheck.endsWith('.' + d)
+    );
+
+    if (!approvedDomain || !isApprovedTargetHost(hostToCheck)) {
       return {
         success: false,
         error: `Host '${hostToCheck}' is not in approved PAM scanner list. To inspect, click 'Authorize Domain & Scan' or paste HTML in DOM Inspector.`,
@@ -2570,7 +2575,7 @@ async function fetchRealLoginPageHtml(
       const timeoutId = setTimeout(() => controller.abort(), 6000);
 
       // Construct sanitized target URL from validated protocol, approved host, and encoded path
-      const safeRequestUrl = `https://${hostToCheck}${encodeURI(parsed.pathname || '/')}${parsed.search ? '?' + encodeURI(parsed.search.slice(1)) : ''}`;
+      const safeRequestUrl = `https://${approvedDomain}${encodeURI(parsed.pathname || '/')}${parsed.search ? '?' + encodeURI(parsed.search.slice(1)) : ''}`;
 
       const response = await fetch(safeRequestUrl, {
         method: 'GET',
