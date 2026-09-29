@@ -2357,51 +2357,60 @@ function isPrivateIPv6(ip: string): boolean {
   return false;
 }
 
-async function validateUrlForSsrf(targetUrl: string): Promise<{ valid: boolean; reason?: string; url?: URL }> {
+const BLOCKED_HOST_SET = new Set([
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::1',
+  'metadata.google.internal',
+  '169.254.169.254',
+  'instance-data',
+]);
+
+const SAFE_DOMAIN_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,24}$/;
+
+async function validateUrlForSsrf(targetUrl: string): Promise<{ valid: boolean; reason?: string; safeUrl?: string }> {
   try {
     const parsed = new URL(targetUrl);
 
-    // Protocol check
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    // Protocol check - strictly allow only http: and https:
+    const safeProtocol = parsed.protocol === 'http:' ? 'http:' : parsed.protocol === 'https:' ? 'https:' : null;
+    if (!safeProtocol) {
       return { valid: false, reason: `Invalid protocol '${parsed.protocol}'. Only HTTP/HTTPS URLs are permitted.` };
     }
 
-    const hostname = parsed.hostname.toLowerCase();
-    if (!hostname) {
+    const cleanHostname = parsed.hostname.toLowerCase().trim();
+    if (!cleanHostname) {
       return { valid: false, reason: 'Hostname is missing from the target URL.' };
     }
 
-    // Block obvious local/internal hostnames
-    const blockedHosts = [
-      'localhost',
-      '127.0.0.1',
-      '0.0.0.0',
-      '::1',
-      'metadata.google.internal',
-      '169.254.169.254',
-      'instance-data',
-    ];
+    // Check against blocked hosts set
     if (
-      blockedHosts.includes(hostname) ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.internal') ||
-      hostname.endsWith('.local')
+      BLOCKED_HOST_SET.has(cleanHostname) ||
+      cleanHostname.endsWith('.localhost') ||
+      cleanHostname.endsWith('.internal') ||
+      cleanHostname.endsWith('.local')
     ) {
-      return { valid: false, reason: `Target host '${hostname}' is restricted by PAM SSRF security policy.` };
+      return { valid: false, reason: `Target host '${cleanHostname}' is restricted by PAM SSRF security policy.` };
+    }
+
+    // Domain regex pattern validation
+    if (!SAFE_DOMAIN_PATTERN.test(cleanHostname)) {
+      return { valid: false, reason: `Invalid hostname syntax for '${cleanHostname}'.` };
     }
 
     // Direct IP address check
-    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
-      if (isPrivateIPv4(hostname)) {
-        return { valid: false, reason: `Private IPv4 address '${hostname}' is blocked by security policy (CWE-918).` };
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(cleanHostname)) {
+      if (isPrivateIPv4(cleanHostname)) {
+        return { valid: false, reason: `Private IPv4 address '${cleanHostname}' is blocked by security policy (CWE-918).` };
       }
     }
 
     // Resolve DNS to verify the target IP is public
     try {
-      const addresses = await dns.promises.lookup(hostname, { all: true });
+      const addresses = await dns.promises.lookup(cleanHostname, { all: true });
       if (!addresses || addresses.length === 0) {
-        return { valid: false, reason: `Domain '${hostname}' could not be resolved.` };
+        return { valid: false, reason: `Domain '${cleanHostname}' could not be resolved.` };
       }
 
       for (const addr of addresses) {
@@ -2409,23 +2418,24 @@ async function validateUrlForSsrf(targetUrl: string): Promise<{ valid: boolean; 
           if (isPrivateIPv4(addr.address)) {
             return {
               valid: false,
-              reason: `DNS for '${hostname}' resolved to internal IP '${addr.address}', blocked by SSRF policy.`,
+              reason: `DNS for '${cleanHostname}' resolved to internal IP '${addr.address}', blocked by SSRF policy.`,
             };
           }
         } else if (addr.family === 6) {
           if (isPrivateIPv6(addr.address)) {
             return {
               valid: false,
-              reason: `DNS for '${hostname}' resolved to internal IPv6 '${addr.address}', blocked by SSRF policy.`,
+              reason: `DNS for '${cleanHostname}' resolved to internal IPv6 '${addr.address}', blocked by SSRF policy.`,
             };
           }
         }
       }
     } catch (dnsErr: any) {
-      return { valid: false, reason: `DNS resolution failed for '${hostname}': ${dnsErr.message || 'Domain not found'}` };
+      return { valid: false, reason: `DNS resolution failed for '${cleanHostname}': ${dnsErr.message || 'Domain not found'}` };
     }
 
-    return { valid: true, url: parsed };
+    const safeUrl = new URL(parsed.pathname + parsed.search, `${safeProtocol}//${cleanHostname}`).href;
+    return { valid: true, safeUrl };
   } catch (err: any) {
     return { valid: false, reason: `Malformed URL format: ${err.message}` };
   }
@@ -2439,7 +2449,7 @@ async function fetchRealLoginPageHtml(
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const validation = await validateUrlForSsrf(currentUrl);
-    if (!validation.valid || !validation.url) {
+    if (!validation.valid || !validation.safeUrl) {
       return {
         success: false,
         error: validation.reason || 'URL failed SSRF validation policy',
@@ -2450,7 +2460,7 @@ async function fetchRealLoginPageHtml(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-      const response = await fetch(validation.url.href, {
+      const response = await fetch(validation.safeUrl, {
         method: 'GET',
         headers: {
           'User-Agent':
