@@ -223,7 +223,7 @@ app.get('/api/download/readme', (_req, res) => {
   res.sendFile(readmePath);
 });
 
-app.get('/README.md', (_req, res) => {
+app.get('/README.md', rateLimit(60, 60000), (_req, res) => {
   const readmePath = path.resolve(process.cwd(), 'README.md');
   res.setHeader('Content-Type', 'text/markdown; charset=UTF-8');
   res.setHeader('Access-Control-Allow-Origin', '*');
