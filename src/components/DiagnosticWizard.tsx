@@ -45,6 +45,83 @@ import { analyzeCyberArkLog, LogAnalysisResult, sanitizeCustomerSecurityLog, Mas
 import { COMMUNITY_KB_ARTICLES } from '../data/communityArticles';
 import { COMPONENT_SYMPTOM_PROFILES, SymptomAreaDetail, getSymptomAreasForComponent } from '../data/symptomAreas';
 
+// Helper to automatically highlight identified error patterns and codes in log lines
+function renderHighlightedLogText(lineText: string, detectedCodes: string[] = []) {
+  if (!lineText) return null;
+
+  const staticPatterns = [
+    'FATAL',
+    'ERROR',
+    'EXCEPTION',
+    'FAILURE',
+    'FAILED',
+    'CRITICAL',
+    'WARN',
+    'WARNING',
+    'WIN32 ERROR 1326',
+    'WIN32 ERROR 5',
+    'ACCESS IS DENIED',
+    'LOGON FAILURE',
+    '3221225786',
+    'EVENT 8004',
+    '500.19',
+    '503 SERVICE UNAVAILABLE',
+    '401 UNAUTHORIZED',
+    'SECURE TUNNEL DISCONNECTED',
+    'PREVENTED FROM RUNNING',
+  ];
+
+  const allPatterns = Array.from(new Set([...detectedCodes, ...staticPatterns]))
+    .filter((p) => p && p.trim().length > 1);
+
+  if (allPatterns.length === 0) {
+    return <span>{lineText}</span>;
+  }
+
+  const escapedPatterns = allPatterns.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp(`(${escapedPatterns.join('|')})`, 'gi');
+
+  const parts = lineText.split(regex);
+  if (parts.length <= 1) {
+    return <span>{lineText}</span>;
+  }
+
+  return (
+    <span>
+      {parts.map((part, idx) => {
+        const isMatched = allPatterns.some((p) => p.toLowerCase() === part.toLowerCase());
+        if (!isMatched) {
+          return <span key={idx}>{part}</span>;
+        }
+
+        const upper = part.toUpperCase();
+        const isCode = detectedCodes.some((c) => c.toLowerCase() === part.toLowerCase());
+        const isFatalOrError =
+          upper.includes('FATAL') ||
+          upper.includes('ERROR') ||
+          upper.includes('EXCEPTION') ||
+          upper.includes('CRITICAL') ||
+          upper.includes('FAILED');
+
+        return (
+          <mark
+            key={idx}
+            className={`px-1.5 py-0.5 mx-0.5 rounded font-mono font-black text-[11px] inline-flex items-center gap-1 shadow-sm ${
+              isCode
+                ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/80 ring-1 ring-cyan-500/50 shadow-cyan-950/80'
+                : isFatalOrError
+                ? 'bg-rose-950 text-rose-200 border border-rose-600/80 ring-1 ring-rose-500/50 shadow-rose-950/80'
+                : 'bg-amber-950 text-amber-200 border border-amber-600/80 ring-1 ring-amber-500/50'
+            }`}
+          >
+            {part}
+          </mark>
+        );
+      })}
+    </span>
+  );
+}
+
 interface DiagnosticWizardProps {
   onSelectError?: (error: ErrorEntry) => void;
   onBookmarkRunbook?: (title: string, code: string, component: PamComponent) => void;
@@ -106,6 +183,34 @@ export const DiagnosticWizard: React.FC<DiagnosticWizardProps> = ({
       setIsLoadingServerLogs(false);
     }
   };
+
+  // Real-time automatic log pattern analysis whenever log text is entered or updated
+  useEffect(() => {
+    if (!rawLogInput.trim()) {
+      setLogAnalysis(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      let effectiveInput = rawLogInput;
+      let stats: MaskingStats | undefined;
+
+      if (autoAnonymize) {
+        const sanitized = sanitizeCustomerSecurityLog(rawLogInput);
+        effectiveInput = sanitized.sanitizedText;
+        stats = sanitized.maskingStats;
+        setLastMaskingStats(stats);
+      }
+
+      const result = analyzeCyberArkLog(effectiveInput, analyzerComponent, false);
+      if (stats) {
+        result.maskingStats = stats;
+        result.isSanitized = true;
+      }
+      setLogAnalysis(result);
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [rawLogInput, analyzerComponent, autoAnonymize]);
 
   // Available components (including Privilege Cloud)
   const COMPONENTS: { name: PamComponent; label: string; desc: string; icon: string; count: number }[] = [
@@ -1692,6 +1797,48 @@ ${currentWorkflow.diagnosisRules.resolutionSteps.map((s, i) => `${i + 1}. ${s}`)
               )}
             </div>
 
+            {/* Live Auto-Identified Error Patterns & Codes Bar */}
+            {logAnalysis && logAnalysis.allDetectedCodes.length > 0 && (
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-cyan-500/40 flex flex-wrap items-center justify-between gap-3 text-xs shadow-md animate-fadeIn">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    Auto-Highlighted Error Patterns ({logAnalysis.allDetectedCodes.length}):
+                  </span>
+                  {logAnalysis.allDetectedCodes.map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => {
+                        setLogFilterQuery(code);
+                        const el = document.getElementById('section-highlighted-error-log');
+                        el?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold border transition-all flex items-center gap-1 cursor-pointer ${
+                        code === logAnalysis.primaryErrorCode
+                          ? 'bg-cyan-950 text-cyan-300 border-cyan-500 ring-1 ring-cyan-500/50'
+                          : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-cyan-500'
+                      }`}
+                      title={`Click to filter log view for pattern ${code}`}
+                    >
+                      <span>{code}</span>
+                      <Search className="w-3 h-3 opacity-60" />
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+                  <span className="text-rose-400 font-bold">
+                    {logAnalysis.culpritLines.length} Culprit Error Line{logAnalysis.culpritLines.length !== 1 ? 's' : ''}
+                  </span>
+                  <span>•</span>
+                  <span className="text-amber-400 font-bold">
+                    {logAnalysis.errorCount} Error Level Line{logAnalysis.errorCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Hidden File Input */}
             <input
               type="file"
@@ -1954,7 +2101,7 @@ ${currentWorkflow.diagnosisRules.resolutionSteps.map((s, i) => `${i + 1}. ${s}`)
                             </div>
 
                             <p className="break-all whitespace-pre-wrap font-mono text-xs text-rose-100 font-bold pl-1 pt-0.5">
-                              {line.raw}
+                              {renderHighlightedLogText(line.raw, logAnalysis.allDetectedCodes)}
                             </p>
                           </div>
                         );
@@ -1991,7 +2138,9 @@ ${currentWorkflow.diagnosisRules.resolutionSteps.map((s, i) => `${i + 1}. ${s}`)
                             </span>
                           )}
 
-                          <span className="break-all whitespace-pre-wrap">{line.raw}</span>
+                          <span className="break-all whitespace-pre-wrap">
+                            {renderHighlightedLogText(line.raw, logAnalysis.allDetectedCodes)}
+                          </span>
                         </div>
                       );
                     })
@@ -2000,7 +2149,7 @@ ${currentWorkflow.diagnosisRules.resolutionSteps.map((s, i) => `${i + 1}. ${s}`)
               </div>
 
               {/* ========================================================================= */}
-              {/* SECTION 2: EXPLAIN THE ERROR AND THE ERROR CODE                           */}
+              {/* SECTION 2: STRUCTURED ANALYSIS SECTION                                    */}
               {/* ========================================================================= */}
               <div
                 id="section-error-code-explanation"
@@ -2011,14 +2160,14 @@ ${currentWorkflow.diagnosisRules.resolutionSteps.map((s, i) => `${i + 1}. ${s}`)
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
                       <h3 className="text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-2">
-                        <span>Error & Error Code Analysis:</span>
+                        <span>Analysis: Error Code Breakdown & Subsystem Cause</span>
                         <span className="font-mono text-cyan-300 bg-slate-950 px-2.5 py-0.5 rounded border border-cyan-800/80">
                           {logAnalysis.primaryErrorCode}
                         </span>
                       </h3>
                     </div>
                     <p className="text-xs text-slate-400">
-                      Technical architectural anatomy, root cause, and subsystem failure details.
+                      Technical architectural anatomy, root cause, and subsystem failure details extracted from log text.
                     </p>
                   </div>
 
