@@ -2319,35 +2319,10 @@ app.post('/api/connectors/generate-webform', createLimiter(20, 60000), async (re
 
   let htmlToAnalyze = (rawHtml && typeof rawHtml === 'string') ? rawHtml.slice(0, 100000) : '';
 
-  // If raw HTML was not provided, attempt a safe fetch with 4s timeout
-  if (!htmlToAnalyze) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const fetchRes = await fetch(parsedUrl.toString(), {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 VaultDesk/1.0',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-      });
-
-      clearTimeout(timeoutId);
-
-      if (fetchRes.ok) {
-        const text = await fetchRes.text();
-        htmlToAnalyze = text.slice(0, 150000);
-      }
-    } catch {
-      // Safe fallback to heuristic domain analyzer on fetch timeout / intranet hosts
-    }
-  }
-
-  // Run DOM analyzer
+  // Run DOM and heuristic analyzer (pure in-memory parsing without server-side outbound HTTP requests to prevent SSRF)
   const analysisResult = analyzeHtmlForWebForms(htmlToAnalyze, parsedUrl.toString());
 
-  // If Gemini AI client is available, refine and enhance field suggestions
+  // If Gemini AI client is available, refine and enhance field suggestions based on URL patterns and HTML structure
   const ai = getAiClient();
   if (ai && htmlToAnalyze) {
     try {
