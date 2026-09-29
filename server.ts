@@ -2559,7 +2559,7 @@ async function fetchRealLoginPageHtml(
     const parsed = new URL(currentUrl);
     const hostToCheck = parsed.hostname.toLowerCase().trim();
 
-    const approvedDomain = customApprovedDomainsDb.find(
+    const approvedDomain = INITIAL_APPROVED_DOMAINS.find(
       (d) => hostToCheck === d || hostToCheck.endsWith('.' + d)
     );
 
