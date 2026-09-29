@@ -9,7 +9,7 @@ import {
 export interface PermissionMeta {
   id: UserPermission;
   label: string;
-  category: 'Knowledge Base' | 'Troubleshooting & Runbooks' | 'Log Analyzer' | 'Updates & Security' | 'User Management' | 'Enterprise SSO & LDAP';
+  category: 'Knowledge Base' | 'Troubleshooting & Runbooks' | 'Log Analyzer' | 'Updates & Security' | 'User Management' | 'Enterprise SSO & LDAP' | 'PSM Web Connectors';
   description: string;
 }
 
@@ -127,6 +127,20 @@ export const ALL_PERMISSIONS: PermissionMeta[] = [
     category: 'Enterprise SSO & LDAP',
     description: 'Manage IdP certificates, assertion URLs, and single sign-on metadata.',
   },
+
+  // PSM Web Connectors
+  {
+    id: 'connectors:read',
+    label: 'View PSM Web Connectors',
+    category: 'PSM Web Connectors',
+    description: 'Browse, inspect, and export PSM Web Universal Connection Components and WebForm definitions.',
+  },
+  {
+    id: 'connectors:manage',
+    label: 'Create & Edit PSM Connectors',
+    category: 'PSM Web Connectors',
+    description: 'Generate WebForm fields from URL, build custom dispatchers, and deploy connection components.',
+  },
 ];
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<'admin' | 'reader' | 'engineer', UserPermission[]> = {
@@ -137,6 +151,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<'admin' | 'reader' | 'engineer', Us
     'troubleshoot:export',
     'updates:read',
     'users:read',
+    'connectors:read',
   ],
   engineer: [
     'kb:read',
@@ -150,6 +165,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<'admin' | 'reader' | 'engineer', Us
     'updates:read',
     'updates:sync',
     'users:read',
+    'connectors:read',
+    'connectors:manage',
   ],
 };
 

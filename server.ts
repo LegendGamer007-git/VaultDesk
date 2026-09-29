@@ -11,9 +11,11 @@ import {
   INITIAL_MARKETPLACE,
   INITIAL_COMMUNITY_THREADS,
 } from './src/data/pamData.ts';
+import { INITIAL_PSM_CONNECTORS } from './src/data/psmConnectorsData.ts';
 import { COMMUNITY_KB_ARTICLES } from './src/data/communityArticles.ts';
 import { INITIAL_LOCAL_KB_ARTICLES } from './src/data/initialLocalKb.ts';
 import { analyzeCyberArkLog, sanitizeCustomerSecurityLog } from './src/utils/logAnalyzer.ts';
+import { analyzeHtmlForWebForms } from './src/utils/psmConnectorGenerator.ts';
 import {
   ErrorEntry,
   UserBookmark,
@@ -27,6 +29,8 @@ import {
   LdapConfig,
   SamlConfig,
   UserRole,
+  PsmWebConnector,
+  WebFormAnalysisResult,
 } from './src/types.ts';
 import {
   ALL_PERMISSIONS,
@@ -73,6 +77,7 @@ const advisoriesDb = [...INITIAL_ADVISORIES];
 const marketplaceDb = [...INITIAL_MARKETPLACE];
 const communityDb = [...INITIAL_COMMUNITY_THREADS];
 let localKbDb: LocalKbArticle[] = [...INITIAL_LOCAL_KB_ARTICLES];
+let psmConnectorsDb: PsmWebConnector[] = [...INITIAL_PSM_CONNECTORS];
 let savedLogsDb: SavedLogEntry[] = [];
 let bookmarksDb: UserBookmark[] = [
   {
@@ -2190,6 +2195,203 @@ app.post('/api/kb/:id/attachments', (req, res) => {
   article.updatedAt = new Date().toISOString();
 
   res.status(201).json(newAttachment);
+});
+
+// ----------------------------------------------------
+// PSM CUSTOM WEB CONNECTOR & WEBFORM GENERATOR ENDPOINTS
+// ----------------------------------------------------
+
+// List all PSM Web Connectors
+app.get('/api/connectors', createLimiter(60, 60000), (_req, res) => {
+  res.json(psmConnectorsDb);
+});
+
+// Get single connector
+app.get('/api/connectors/:id', createLimiter(60, 60000), (req, res) => {
+  const { id } = req.params;
+  const connector = psmConnectorsDb.find(
+    (c) => c.id === id || c.connectionComponentId.toLowerCase() === id.toLowerCase()
+  );
+
+  if (!connector) {
+    return res.status(404).json({ error: 'PSM Connector not found' });
+  }
+
+  res.json(connector);
+});
+
+// Create or update PSM connector
+app.post('/api/connectors', createLimiter(30, 60000), (req, res) => {
+  const body = req.body as Partial<PsmWebConnector>;
+
+  if (!body.connectionComponentId || !body.targetUrl) {
+    return res.status(400).json({ error: 'Connection Component ID and Target URL are required.' });
+  }
+
+  const cleanComponentId = body.connectionComponentId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  const cleanName = (body.name || cleanComponentId).slice(0, 100);
+
+  const existingIndex = psmConnectorsDb.findIndex(
+    (c) => c.id === body.id || c.connectionComponentId === cleanComponentId
+  );
+
+  const newConnector: PsmWebConnector = {
+    id: body.id || `psm-conn-${randomUUID()}`,
+    name: cleanName,
+    connectionComponentId: cleanComponentId,
+    targetUrl: body.targetUrl.slice(0, 500),
+    clientUrl: body.clientUrl ? body.clientUrl.slice(0, 500) : body.targetUrl.slice(0, 500),
+    browserType: body.browserType === 'Edge' ? 'Edge' : body.browserType === 'Chromium' ? 'Chromium' : 'Chrome',
+    browserPath: body.browserPath ? body.browserPath.slice(0, 300) : undefined,
+    dispatcher: body.dispatcher || 'CyberArk.Extensions.Plugin.WebAppDispatcher',
+    runMode: body.runMode === 'Headless' ? 'Headless' : 'Normal',
+    lockAppWindow: body.lockAppWindow !== false,
+    enforceCertValidation: body.enforceCertValidation !== false,
+    actionTimeout: Math.min(Math.max(Number(body.actionTimeout) || 30, 5), 300),
+    fields: Array.isArray(body.fields) ? body.fields : [],
+    description: (body.description || '').slice(0, 1000),
+    category: (body.category || 'Custom Web Applications').slice(0, 50),
+    tags: Array.isArray(body.tags) ? body.tags.map((t) => String(t).slice(0, 30)) : ['psm-web'],
+    createdAt: existingIndex >= 0 ? psmConnectorsDb[existingIndex].createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    author: body.author || 'VaultDesk User',
+    validationRule: body.validationRule ? body.validationRule.slice(0, 200) : undefined,
+  };
+
+  if (existingIndex >= 0) {
+    psmConnectorsDb[existingIndex] = newConnector;
+  } else {
+    psmConnectorsDb.unshift(newConnector);
+  }
+
+  res.status(201).json(newConnector);
+});
+
+// Delete custom connector
+app.delete('/api/connectors/:id', createLimiter(30, 60000), (req, res) => {
+  const { id } = req.params;
+  const initialLen = psmConnectorsDb.length;
+  psmConnectorsDb = psmConnectorsDb.filter(
+    (c) => c.id !== id && c.connectionComponentId.toLowerCase() !== id.toLowerCase()
+  );
+
+  if (psmConnectorsDb.length === initialLen) {
+    return res.status(404).json({ error: 'Connector not found' });
+  }
+
+  res.json({ success: true, remaining: psmConnectorsDb.length });
+});
+
+// URL & DOM WebForm Fields Auto-Generator (SSRF-protected)
+app.post('/api/connectors/generate-webform', createLimiter(20, 60000), async (req, res) => {
+  const { targetUrl, rawHtml } = req.body;
+
+  if (!targetUrl || typeof targetUrl !== 'string') {
+    return res.status(400).json({ error: 'Target URL is required.' });
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(targetUrl.startsWith('http') ? targetUrl : `https://${targetUrl}`);
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL format.' });
+  }
+
+  // Enforce http/https protocols only
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return res.status(400).json({ error: 'Only http and https protocols are supported.' });
+  }
+
+  // SSRF Protection: Block cloud metadata and loopback addresses
+  const hostname = parsedUrl.hostname.toLowerCase();
+  if (
+    hostname === '169.254.169.254' ||
+    hostname === 'metadata.google.internal' ||
+    hostname === '127.0.0.1' ||
+    hostname === 'localhost' ||
+    hostname === '::1' ||
+    hostname === '0.0.0.0'
+  ) {
+    return res.status(400).json({
+      error: 'Security Policy Violation: Access to loopback or cloud metadata services is blocked (SSRF Protection).',
+    });
+  }
+
+  let htmlToAnalyze = (rawHtml && typeof rawHtml === 'string') ? rawHtml.slice(0, 100000) : '';
+
+  // If raw HTML was not provided, attempt a safe fetch with 4s timeout
+  if (!htmlToAnalyze) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const fetchRes = await fetch(parsedUrl.toString(), {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 VaultDesk/1.0',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (fetchRes.ok) {
+        const text = await fetchRes.text();
+        htmlToAnalyze = text.slice(0, 150000);
+      }
+    } catch {
+      // Safe fallback to heuristic domain analyzer on fetch timeout / intranet hosts
+    }
+  }
+
+  // Run DOM analyzer
+  const analysisResult = analyzeHtmlForWebForms(htmlToAnalyze, parsedUrl.toString());
+
+  // If Gemini AI client is available, refine and enhance field suggestions
+  const ai = getAiClient();
+  if (ai && htmlToAnalyze) {
+    try {
+      const prompt = `Analyze this web login page HTML and produce CyberArk PSM WebFormFields configuration.
+Target URL: ${parsedUrl.toString()}
+HTML Snippet:
+${htmlToAnalyze.slice(0, 3000)}
+
+Output a concise JSON object with structure:
+{
+  "fields": [
+    { "target": "element-selector", "actionType": "username|password|button|validation|click", "value": "{Username}|{Password}|(Button)|(Validation)", "searchBy": "id|name|class|xpath" }
+  ]
+}`;
+
+      const aiResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+        },
+      });
+
+      if (aiResponse.text) {
+        const parsedAi = JSON.parse(aiResponse.text);
+        if (Array.isArray(parsedAi.fields) && parsedAi.fields.length > 0) {
+          analysisResult.fields = parsedAi.fields.map((f: any, idx: number) => ({
+            id: `ai-field-${randomUUID().slice(0, 8)}`,
+            target: String(f.target || 'input'),
+            actionType: f.actionType || 'username',
+            value: String(f.value || '{Username}'),
+            searchBy: f.searchBy || 'id',
+            comment: `AI-inferred ${f.actionType} element`,
+          }));
+          analysisResult.analysisMethod = 'gemini_ai';
+        }
+      }
+    } catch {
+      // Keep heuristic result on AI timeout
+    }
+  }
+
+  res.json(analysisResult);
 });
 
 // ----------------------------------------------------

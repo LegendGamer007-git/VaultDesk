@@ -233,7 +233,9 @@ export type UserPermission =
   | 'users:manage'
   | 'users:invite'
   | 'auth:configure_ldap'
-  | 'auth:configure_saml';
+  | 'auth:configure_saml'
+  | 'connectors:read'
+  | 'connectors:manage';
 
 export interface CustomRoleDefinition {
   id: string;
@@ -296,5 +298,74 @@ export interface SamlConfig {
   lastTestedAt?: string;
   lastStatus?: 'success' | 'failed' | 'idle';
   lastStatusMessage?: string;
+}
+
+// PSM Web-Based Custom Connector & WebForm Field Types
+export type WebFormFieldSearchBy =
+  | 'id'
+  | 'name'
+  | 'class'
+  | 'xpath'
+  | 'tag'
+  | 'css'
+  | 'text';
+
+export type WebFormFieldActionType =
+  | 'username'
+  | 'password'
+  | 'button'
+  | 'click'
+  | 'text'
+  | 'select'
+  | 'checkbox'
+  | 'validation'
+  | 'wait'
+  | 'clear';
+
+export interface WebFormField {
+  id: string;
+  target: string;
+  actionType: WebFormFieldActionType;
+  value: string;
+  searchBy: WebFormFieldSearchBy;
+  comment?: string;
+  optional?: boolean;
+}
+
+export interface PsmWebConnector {
+  id: string;
+  name: string;
+  connectionComponentId: string;
+  targetUrl: string;
+  clientUrl?: string;
+  browserType: 'Chrome' | 'Edge' | 'Chromium';
+  browserPath?: string;
+  dispatcher: 'CyberArk.Extensions.Plugin.WebAppDispatcher' | 'AutoIt' | 'Selenium';
+  runMode: 'Normal' | 'Headless';
+  lockAppWindow: boolean;
+  enforceCertValidation: boolean;
+  actionTimeout: number;
+  fields: WebFormField[];
+  description: string;
+  category: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  author?: string;
+  isTemplate?: boolean;
+  validationRule?: string;
+}
+
+export interface WebFormAnalysisResult {
+  detectedUrl: string;
+  pageTitle?: string;
+  formCount: number;
+  fields: WebFormField[];
+  suggestedComponentId: string;
+  suggestedName: string;
+  suggestedCategory: string;
+  analysisMethod: 'live_fetch' | 'gemini_ai' | 'heuristic_parser' | 'template_match';
+  securityWarnings: string[];
+  rawHtmlSnippet?: string;
 }
 

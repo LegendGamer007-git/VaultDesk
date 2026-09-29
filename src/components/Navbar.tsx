@@ -20,12 +20,14 @@ import {
   ChevronDown,
   Download,
   FileText,
+  Globe,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 
 export type NavTab =
   | 'troubleshooting'
   | 'wizard'
+  | 'connectors'
   | 'local-kb'
   | 'updates'
   | 'marketplace'
@@ -117,6 +119,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Diagnostic Wizard</span>
               <span className="hidden lg:inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold bg-[#12241A] text-[#30D158] border border-[#30D158]/30">
                 Logs
+              </span>
+            </button>
+
+            <button
+              id="nav-connectors"
+              onClick={() => setActiveTab('connectors')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-sm font-medium transition-colors ${
+                activeTab === 'connectors'
+                  ? 'bg-[#1A1E27] text-[#0A84FF] border border-[#2E3440] shadow-sm'
+                  : 'text-[#A6AEC0] hover:text-[#F5F6F8] hover:bg-[#12151C]'
+              }`}
+            >
+              <Globe className="w-4 h-4 text-[#64D2FF]" />
+              <span>PSM Connectors</span>
+              <span className="hidden lg:inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold bg-[#0A84FF]/20 text-[#64D2FF] border border-[#0A84FF]/30">
+                WebForm
               </span>
             </button>
 
@@ -405,6 +423,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             Wizard & Logs
+          </button>
+          <button
+            id="mobile-nav-connectors"
+            onClick={() => setActiveTab('connectors')}
+            className={`px-3 py-1.5 rounded-[8px] whitespace-nowrap font-medium ${
+              activeTab === 'connectors' ? 'bg-[#1A1E27] text-[#0A84FF]' : 'text-[#A6AEC0]'
+            }`}
+          >
+            PSM Connectors
           </button>
           <button
             id="mobile-nav-local-kb"

@@ -8,6 +8,7 @@ import { CommunityHub } from './components/CommunityHub';
 import { SettingsView } from './components/SettingsView';
 import { BookmarksDrawer } from './components/BookmarksDrawer';
 import { DiagnosticWizard } from './components/DiagnosticWizard';
+import { PsmConnectorStudio } from './components/PsmConnectorStudio';
 import { LocalKnowledgeBase } from './components/LocalKnowledgeBase';
 import { LoginView } from './components/LoginView';
 import { UserManagement } from './components/UserManagement';
@@ -602,6 +603,13 @@ export default function App() {
           <DiagnosticWizard
             onSelectError={handleSelectError}
             onBookmarkRunbook={handleBookmarkRunbook}
+          />
+        )}
+
+        {activeTab === 'connectors' && (
+          <PsmConnectorStudio
+            currentUser={currentUser}
+            onNavigateToTroubleshoot={() => setActiveTab('troubleshooting')}
           />
         )}
 
