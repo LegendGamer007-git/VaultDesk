@@ -2501,11 +2501,29 @@ async function fetchRealLoginPageHtml(
       };
     }
 
+    const parsed = new URL(currentUrl);
+    const hostToCheck = parsed.hostname.toLowerCase().trim();
+
+    // Direct in-scope allowlist verification (CWE-918 CodeQL sanitizer)
+    const approvedDomain = APPROVED_ENTERPRISE_HOSTS.find(
+      (d) => hostToCheck === d || hostToCheck.endsWith('.' + d)
+    );
+
+    if (!approvedDomain || !isApprovedTargetHost(hostToCheck)) {
+      return {
+        success: false,
+        error: `Host '${hostToCheck}' is not in approved PAM scanner list. To inspect, paste HTML in DOM Inspector tab.`,
+      };
+    }
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-      const response = await fetch(validation.safeUrl, {
+      // Construct sanitized target URL from validated protocol, approved host, and encoded path
+      const safeRequestUrl = `https://${approvedDomain}${encodeURI(parsed.pathname || '/')}${parsed.search ? '?' + encodeURI(parsed.search.slice(1)) : ''}`;
+
+      const response = await fetch(safeRequestUrl, {
         method: 'GET',
         headers: {
           'User-Agent':
