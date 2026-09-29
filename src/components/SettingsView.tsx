@@ -10,8 +10,12 @@ import {
   Download,
   Github,
   ExternalLink,
+  Sun,
+  Moon,
+  Sparkles,
 } from 'lucide-react';
 import { PamComponent, UserPreferences } from '../types';
+import { ThemeToggle, ThemeMode } from './ThemeToggle';
 
 interface SettingsViewProps {
   preferences: UserPreferences;
@@ -23,6 +27,8 @@ interface SettingsViewProps {
     hasGeminiKey: boolean;
   };
   onOpenReadme?: () => void;
+  currentTheme?: ThemeMode;
+  onThemeChange?: (theme: ThemeMode) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -30,6 +36,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdatePreferences,
   apiStatus,
   onOpenReadme,
+  currentTheme = 'dark',
+  onThemeChange,
 }) => {
   const [prefs, setPrefs] = useState<UserPreferences>({ ...preferences });
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -80,6 +88,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {/* Settings Cards */}
       <div className="space-y-5">
+        {/* Apple Theme & iOS Liquid Glass Appearance Card */}
+        {onThemeChange && (
+          <div className="p-6 rounded-[18px] liquid-glass-elevated space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 text-[var(--text-primary)] font-bold text-base">
+                <Sparkles className="w-5 h-5 text-[#0A84FF]" />
+                <span>Appearance & Cupertino Design Mode</span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#0A84FF]/10 text-[#0A84FF] border border-[#0A84FF]/30">
+                Apple & iOS Liquid Glass
+              </span>
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Switch between Light Mode, Dark Titanium, or System Preference with frosted iOS liquid glass translucency, blur filters, and specular highlights.
+            </p>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-[14px] bg-white/5 border border-white/10">
+              <div className="space-y-1">
+                <span className="text-sm font-semibold text-[var(--text-primary)] block">
+                  Active Theme Mode
+                </span>
+                <span className="text-xs text-[var(--text-secondary)] block">
+                  {currentTheme === 'light'
+                    ? 'Cupertino Light Canvas (#F5F5F7) with Apple Blue accents'
+                    : currentTheme === 'dark'
+                    ? 'Space Titanium Dark Canvas (#0B0E14) with glowing glass'
+                    : 'Automatically match macOS / iOS / OS System Theme'}
+                </span>
+              </div>
+
+              <ThemeToggle
+                currentTheme={currentTheme || 'dark'}
+                onThemeChange={onThemeChange}
+                variant="segmented"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Followed Components */}
         <div className="p-6 rounded-[14px] bg-[#12151C] border border-[#232833] space-y-4">
           <div className="flex items-center gap-2 text-[#F5F6F8] font-bold text-base">

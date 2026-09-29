@@ -209,6 +209,7 @@ export interface UserPreferences {
   notifyOnPatchRelease: boolean;
   enableGeminiGrounding: boolean;
   defaultView: 'troubleshooting' | 'updates';
+  theme?: 'light' | 'dark' | 'system';
 }
 
 // User Management, Authentication & RBAC Control Types

@@ -1,12 +1,13 @@
 @import "tailwindcss";
 
 @layer base {
-  :root {
+  /* Default Dark / Apple Space Titanium theme tokens */
+  :root, html.dark {
     --canvas: #0B0E14;
     --surface-1: #12151C;
     --surface-2: #1A1E27;
     --surface-3: #232833;
-    --overlay-scrim: rgba(5, 7, 10, 0.8);
+    --overlay-scrim: rgba(5, 7, 10, 0.82);
     --border-subtle: #232833;
     --border-default: #2E3440;
     --border-strong: #3D4454;
@@ -30,14 +31,68 @@
     --semantic-info: #64D2FF;
     --semantic-info-surface: #101E26;
     --semantic-neutral: #8E97A8;
+
+    /* Apple Liquid Glass Dark Tokens */
+    --glass-bg-base: rgba(18, 21, 28, 0.72);
+    --glass-bg-elevated: rgba(26, 30, 39, 0.82);
+    --glass-bg-hover: rgba(35, 40, 51, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-border-subtle: rgba(255, 255, 255, 0.08);
+    --glass-highlight: rgba(255, 255, 255, 0.15);
+    --glass-shadow: 0 12px 32px 0 rgba(0, 0, 0, 0.45);
+    --glass-glow: rgba(10, 132, 255, 0.15);
+  }
+
+  /* Apple Light Mode (Clean Cupertino) */
+  html.light, [data-theme="light"] {
+    --canvas: #F5F5F7;
+    --surface-1: #FFFFFF;
+    --surface-2: #F2F2F7;
+    --surface-3: #E5E5EA;
+    --overlay-scrim: rgba(240, 240, 245, 0.75);
+    --border-subtle: #E5E5EA;
+    --border-default: #D1D1D6;
+    --border-strong: #C7C7CC;
+    --border-focus: #0071E3;
+    --text-primary: #1D1D1F;
+    --text-secondary: #6E6E73;
+    --text-tertiary: #86868B;
+    --text-disabled: #AEAEE2;
+    --text-inverse: #FFFFFF;
+    --accent-primary: #0071E3;
+    --accent-primary-hover: #0077ED;
+    --accent-primary-pressed: #005BB5;
+    --accent-secondary: #34C759;
+    --semantic-critical: #FF3B30;
+    --semantic-critical-surface: #FFEDEC;
+    --semantic-high: #FF6961;
+    --semantic-warning: #FF9500;
+    --semantic-warning-surface: #FFF8E6;
+    --semantic-success: #34C759;
+    --semantic-success-surface: #EAF8ED;
+    --semantic-info: #0071E3;
+    --semantic-info-surface: #EBF5FF;
+    --semantic-neutral: #8E8E93;
+
+    /* Apple Liquid Glass Light Tokens */
+    --glass-bg-base: rgba(255, 255, 255, 0.75);
+    --glass-bg-elevated: rgba(255, 255, 255, 0.88);
+    --glass-bg-hover: rgba(242, 242, 247, 0.95);
+    --glass-border: rgba(0, 0, 0, 0.1);
+    --glass-border-subtle: rgba(0, 0, 0, 0.06);
+    --glass-highlight: rgba(255, 255, 255, 0.9);
+    --glass-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.06);
+    --glass-glow: rgba(0, 113, 227, 0.12);
   }
 
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, sans-serif;
-    background-color: #0B0E14;
-    color: #F5F6F8;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Inter, Arial, sans-serif;
+    background-color: var(--canvas);
+    color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
-    letter-spacing: -0.005em;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.011em;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   code, pre, .font-mono {
@@ -45,124 +100,245 @@
   }
 }
 
-/* Custom subtle scrollbar matching VaultDesk canvas and surfaces */
+/* Custom Apple Smooth Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
-  background: #0B0E14;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #232833;
-  border-radius: 4px;
+  background: var(--border-default);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2E3440;
+  background: var(--border-strong);
 }
 
-/* VaultDesk Design System Tokens & Helper Classes */
+/* iOS Liquid Glass Design System Utilities */
+.liquid-glass {
+  background-color: var(--glass-bg-base);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 1px 0 var(--glass-highlight);
+  border-radius: 18px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.liquid-glass-elevated {
+  background-color: var(--glass-bg-elevated);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), 0 0 0 1px var(--glass-border-subtle), inset 0 1px 1px 0 var(--glass-highlight);
+  border-radius: 22px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.liquid-glass-interactive {
+  background-color: var(--glass-bg-base);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 1px 0 var(--glass-highlight);
+  border-radius: 16px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.liquid-glass-interactive:hover {
+  background-color: var(--glass-bg-hover);
+  border-color: var(--accent-primary);
+  box-shadow: var(--glass-shadow), 0 0 16px 0 var(--glass-glow), inset 0 1px 1px 0 var(--glass-highlight);
+  transform: translateY(-1px);
+}
+
+.liquid-glass-bar {
+  background-color: var(--glass-bg-base);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), inset 0 1px 0 0 var(--glass-highlight);
+}
+
+.liquid-glass-input {
+  background-color: var(--glass-bg-base);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.liquid-glass-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--glass-glow), inset 0 1px 1px 0 var(--glass-highlight);
+  outline: none;
+}
+
+/* Legacy vault- class mappings for automatic Light/Dark compatibility */
 .vault-canvas {
-  background-color: #0B0E14;
+  background-color: var(--canvas);
 }
 
 .vault-surface-1 {
-  background-color: #12151C;
+  background-color: var(--surface-1);
 }
 
 .vault-surface-2 {
-  background-color: #1A1E27;
+  background-color: var(--surface-2);
 }
 
 .vault-surface-3 {
-  background-color: #232833;
+  background-color: var(--surface-3);
 }
 
 .vault-border-subtle {
-  border-color: #232833;
+  border-color: var(--border-subtle);
 }
 
 .vault-border-default {
-  border-color: #2E3440;
+  border-color: var(--border-default);
 }
 
 .vault-border-strong {
-  border-color: #3D4454;
+  border-color: var(--border-strong);
 }
 
 .vault-card {
-  background-color: #12151C;
-  border: 1px solid #232833;
-  border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  background-color: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .vault-card-elevated {
-  background-color: #1A1E27;
-  border: 1px solid #2E3440;
-  border-radius: 14px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  background-color: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
 }
 
 .vault-modal {
-  background-color: #1A1E27;
-  border: 1px solid #2E3440;
-  border-radius: 20px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  background-color: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: 24px;
+  box-shadow: var(--glass-shadow);
 }
 
 .vault-input {
-  background-color: #1A1E27;
-  border: 1px solid #2E3440;
-  border-radius: 10px;
-  color: #F5F6F8;
+  background-color: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  color: var(--text-primary);
   height: 40px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .vault-input:focus {
-  border-color: #0A84FF;
-  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--glass-glow);
   outline: none;
 }
 
 .vault-btn-primary {
-  background-color: #0A84FF;
+  background-color: var(--accent-primary);
   color: #FFFFFF;
-  border-radius: 10px;
+  border-radius: 12px;
   font-weight: 600;
   padding: 10px 20px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  transition: background-color 0.15s ease, transform 0.1s ease;
+  box-shadow: 0 2px 6px rgba(0, 113, 227, 0.3);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .vault-btn-primary:hover {
-  background-color: #3B9EFF;
+  background-color: var(--accent-primary-hover);
+  transform: translateY(-1px);
 }
 
 .vault-btn-primary:active {
-  background-color: #0866CC;
+  background-color: var(--accent-primary-pressed);
+  transform: translateY(0);
 }
 
 .vault-btn-secondary {
   background-color: transparent;
-  border: 1px solid #3D4454;
-  color: #F5F6F8;
-  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  border-radius: 12px;
   font-weight: 500;
   padding: 8px 16px;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .vault-btn-secondary:hover {
-  background-color: #1A1E27;
-  border-color: #A6AEC0;
+  background-color: var(--surface-2);
+  border-color: var(--text-secondary);
 }
 
 .vault-code-block {
-  background-color: #080A0F;
-  border: 1px solid #232833;
-  border-radius: 10px;
-  color: #F5F6F8;
+  background-color: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
   font-family: 'SF Mono', 'JetBrains Mono', 'Roboto Mono', ui-monospace, monospace;
+}
+
+/* Light mode overrides for hardcoded background classes across views */
+html.light .bg-\[\#0B0E14\] {
+  background-color: var(--canvas) !important;
+}
+
+html.light .bg-\[\#12151C\] {
+  background-color: var(--surface-1) !important;
+}
+
+html.light .bg-\[\#1A1E27\] {
+  background-color: var(--surface-2) !important;
+}
+
+html.light .bg-\[\#232833\] {
+  background-color: var(--surface-3) !important;
+}
+
+html.light .border-\[\#232833\] {
+  border-color: var(--border-subtle) !important;
+}
+
+html.light .border-\[\#2E3440\] {
+  border-color: var(--border-default) !important;
+}
+
+html.light .border-\[\#3D4454\] {
+  border-color: var(--border-strong) !important;
+}
+
+html.light .text-\[\#F5F6F8\] {
+  color: var(--text-primary) !important;
+}
+
+html.light .text-\[\#A6AEC0\] {
+  color: var(--text-secondary) !important;
+}
+
+html.light .text-\[\#6E7787\] {
+  color: var(--text-tertiary) !important;
+}
+
+/* Apple text gradient */
+.apple-gradient-text {
+  background: linear-gradient(135deg, #0071E3 0%, #64D2FF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Subtle Apple glow background effect */
+.apple-ambient-bg {
+  background: radial-gradient(circle at 50% 0%, rgba(10, 132, 255, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
+html.light .apple-ambient-bg {
+  background: radial-gradient(circle at 50% 0%, rgba(0, 113, 227, 0.06) 0%, rgba(245, 245, 247, 0) 70%);
 }

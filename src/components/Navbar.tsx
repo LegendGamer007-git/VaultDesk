@@ -23,6 +23,7 @@ import {
   Globe,
 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { ThemeToggle, ThemeMode } from './ThemeToggle';
 
 export type NavTab =
   | 'troubleshooting'
@@ -51,6 +52,8 @@ interface NavbarProps {
   onLogout?: () => void;
   onSwitchDemoUser?: (email: string) => void;
   onOpenReadme?: () => void;
+  currentTheme?: ThemeMode;
+  onThemeChange?: (theme: ThemeMode) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -64,11 +67,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onSwitchDemoUser,
   onOpenReadme,
+  currentTheme = 'dark',
+  onThemeChange,
 }) => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 bg-[#0B0E14]/90 backdrop-blur-md border-b border-[#232833] text-[#F5F6F8]">
+    <header className="sticky top-0 z-40 liquid-glass-bar border-b border-white/10 text-[var(--text-primary)] transition-all duration-300">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
           {/* Brand */}
@@ -242,6 +247,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               )}
             </button>
+
+            {/* Dark & Light Mode Switcher */}
+            {onThemeChange && (
+              <ThemeToggle
+                currentTheme={currentTheme}
+                onThemeChange={onThemeChange}
+                variant="compact"
+              />
+            )}
 
             {/* Settings button */}
             <button

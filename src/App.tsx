@@ -104,6 +104,62 @@ export default function App() {
     return DEFAULT_PREFERENCES;
   });
 
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
+    try {
+      const saved = localStorage.getItem('vaultdesk_theme');
+      if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+      return preferences.theme || 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
+
+  // Apply Apple theme and iOS liquid glass mode to document element
+  useEffect(() => {
+    const applyTheme = () => {
+      const root = document.documentElement;
+      let effectiveTheme: 'light' | 'dark' = 'dark';
+
+      if (themeMode === 'system') {
+        effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light';
+      } else {
+        effectiveTheme = themeMode;
+      }
+
+      root.classList.remove('light', 'dark');
+      root.classList.add(effectiveTheme);
+      root.setAttribute('data-theme', effectiveTheme);
+
+      try {
+        localStorage.setItem('vaultdesk_theme', themeMode);
+      } catch {
+        // ignore
+      }
+    };
+
+    applyTheme();
+
+    if (themeMode === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = () => applyTheme();
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+    }
+  }, [themeMode]);
+
+  const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
+    setThemeMode(newTheme);
+    const newPrefs = { ...preferences, theme: newTheme };
+    setPreferences(newPrefs);
+    try {
+      localStorage.setItem('vaultdesk_prefs', JSON.stringify(newPrefs));
+    } catch {
+      // ignore
+    }
+  };
+
   const [apiStatus, setApiStatus] = useState({
     online: true,
     errorCount: INITIAL_ERRORS.length,
@@ -573,6 +629,8 @@ export default function App() {
         onLogout={handleLogout}
         onSwitchDemoUser={handleSwitchDemoUser}
         onOpenReadme={() => setIsReadmeModalOpen(true)}
+        currentTheme={themeMode}
+        onThemeChange={handleThemeChange}
       />
 
       {/* Main Content Area - 1440px container max */}
@@ -659,6 +717,8 @@ export default function App() {
             onUpdatePreferences={handleUpdatePreferences}
             apiStatus={apiStatus}
             onOpenReadme={() => setIsReadmeModalOpen(true)}
+            currentTheme={themeMode}
+            onThemeChange={handleThemeChange}
           />
         )}
       </main>
