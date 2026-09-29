@@ -1,4 +1,4 @@
-# VaultDesk — CyberArk PAM Operations & Troubleshooting Portal
+# VaultDesk — CyberArk PAM Operations, Troubleshooting Portal & PSM Connector Studio
 
 [![Node.js](https://img.shields.io/badge/Node.js-22%20LTS-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-19.0-61DAFB?logo=react&logoColor=black)](https://react.dev/)
@@ -6,64 +6,132 @@
 [![Vite](https://img.shields.io/badge/Vite-8.x-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Express](https://img.shields.io/badge/Express-4.21-000000?logo=express&logoColor=white)](https://expressjs.com/)
-[![Security Audit](https://img.shields.io/badge/Vulnerabilities-0%20Known-brightgreen?logo=dependabot&logoColor=white)](#security-audit--scanning-compliance)
+[![Security Audit](https://img.shields.io/badge/Vulnerabilities-0%20Known-brightgreen?logo=dependabot&logoColor=white)](#security-hardening--scan-compliance)
+[![CodeQL SAST](https://img.shields.io/badge/CodeQL-0%20Alerts%20Passed-brightgreen?logo=github&logoColor=white)](#security-hardening--scan-compliance)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**VaultDesk** is an enterprise-grade operational diagnostic portal and runbook knowledge repository for Privileged Access Management (PAM) engineering teams. It integrates deep log parsing, root-cause diagnosis, rich-text SOP authoring, community intelligence, CVE vulnerability tracking, and role-based access control (RBAC).
+**VaultDesk** is an enterprise-grade operational diagnostic portal, runbook knowledge repository, and **PSM Universal Web Connector Studio** purpose-built for Privileged Access Management (PAM) engineering and SecOps teams. It streamlines the day-to-day operations of enterprise PAM suites (including CyberArk PAS Self-Hosted and CyberArk Privilege Cloud) by unifying deep log parsing, root-cause diagnosis, automated web connector generation, rich-text standard operating procedure (SOP) authoring, live CVE tracking, and granular role-based access control (RBAC).
+
+---
+
+## 🎯 Problem Statement
+
+### The Enterprise Challenge
+Privileged Access Management (PAM) platforms protect an organization's most critical assets—domain controllers, cloud root accounts, database administrator credentials, and core infrastructure. However, operating and maintaining large-scale PAM deployments presents critical operational bottlenecks:
+
+1. **Cryptic Failure Modes & High Downtime Costs**:
+   * Failures spanning the Digital Vault, Central Policy Manager (CPM), Privileged Session Manager (PSM), Password Vault Web Access (PVWA), Central Credential Provider (CCP), and Privileged Threat Analytics (PTA) produce cryptic error codes (such as `ITATS006E`, `PSMSR037E`, `CACPM072E`, or `APPAP002E`).
+   * Triage often demands hours of scouring disconnected documentation, vendor portals, and tribal knowledge, prolonging operational downtime during critical access blockages.
+
+2. **Accidental Credential & PII Leakage in Log Triage**:
+   * Raw component logs (`itaso001.log`, `pm_error.log`, `PSMTrace.log`, `WebApplicationDispatcher.log`) frequently contain clear-text passwords, session tokens, internal IP addresses, server hostnames, and safe naming conventions.
+   * Operations teams troubleshooting incidents inadvertently risk pasting sensitive credentials into external ticketing systems or public AI models.
+
+3. **Complex, Error-Prone PSM Web Connector Development**:
+   * Onboarding internal web applications, SaaS dashboards, and administrative consoles into CyberArk PSM WebApp Dispatcher requires tedious manual DOM inspection, manual XPath/ID selector determination, and trial-and-error AutoIt / XML configuration.
+   * Dispatcher errors (e.g. element not found, AppLocker blocks, dual-step MFA issues) lead to frequent connection drops.
+
+4. **Fragmented Documentation & Lack of Governance**:
+   * Standard operating procedures (SOPs) and disaster recovery runbooks are scattered across wikis, local drives, and spreadsheets without access control or change tracking.
+
+### The VaultDesk Solution
+VaultDesk bridges these operational gaps with an all-in-one, security-hardened portal:
+* **Zero-Leakage Log Sanitizer**: Automatically detects and redacts passwords, IP addresses, session tokens, and safe names before analysis.
+* **120+ Curated PAM Error Catalog & Diagnostic Wizard**: Instant diagnosis with verified root causes, remediation checklists, and log paths.
+* **PSM Universal Connector Studio & WebForm Generator**: Live DOM scanner with SSRF-hardened dynamic domain authorization, synthesizing standard CyberArk `WebFormFields` sequences and AutoIt dispatchers in seconds.
+* **Resilient Grounded AI Diagnostics**: Deep contextual resolution runbooks powered by `@google/genai` with search grounding and offline fail-safe runbook synthesis.
+* **Enterprise SOP Knowledge Base & Granular RBAC**: Multi-space rich text authoring with 17 distinct privileges, LDAP/AD and SAML 2.0 SSO simulations.
 
 ---
 
 ## Table of Contents
 
-1. [Key Features](#key-features)
-2. [Architecture Overview](#architecture-overview)
-3. [Operating System & Hardware Requirements](#operating-system--hardware-requirements)
-4. [Prerequisites](#prerequisites)
-5. [Step-by-Step Installation Guide](#step-by-step-installation-guide)
-6. [Environment Variables](#environment-variables)
-7. [Running the Application](#running-the-application)
-8. [Building for Production](#building-for-production)
-9. [Security Hardening & Scan Compliance](#security-hardening--scan-compliance)
-10. [Running Security Scans Locally & on GitHub](#running-security-scans-locally--on-github)
-11. [Available NPM Scripts](#available-npm-scripts)
-12. [Project File Structure](#project-file-structure)
-13. [API Endpoints Reference](#api-endpoints-reference)
-14. [Troubleshooting & FAQ](#troubleshooting--faq)
+1. [Problem Statement](#-problem-statement)
+2. [Key Features & Capabilities](#key-features--capabilities)
+3. [Architecture Overview](#architecture-overview)
+4. [Operating System & Hardware Requirements](#operating-system--hardware-requirements)
+5. [Complete Step-by-Step Installation Guides](#complete-step-by-step-installation-guides)
+   * [Guide A: Linux (Ubuntu / Debian / RHEL / Fedora / Arch)](#guide-a-linux-installation-ubuntu--debian--rhel--fedora--arch)
+   * [Guide B: Windows 10 & 11 (PowerShell / WSL2)](#guide-b-windows-10--11-installation-powershell)
+   * [Guide C: macOS (Apple Silicon M1-M4 & Intel)](#guide-c-macos-installation-apple-silicon--intel)
+6. [Quick Installation Commands](#quick-installation-commands-by-os)
+7. [Logging In & Default User Credentials](#logging-in--default-user-credentials)
+8. [PSM Connector Studio & WebForm Generator Guide](#psm-connector-studio--webform-generator-guide)
+9. [Environment Variables](#environment-variables)
+10. [Building for Production](#building-for-production)
+11. [Security Hardening & Scan Compliance](#security-hardening--scan-compliance)
+12. [Running Security Scans Locally & on GitHub](#running-security-scans-locally--on-github)
+13. [Available NPM Scripts](#available-npm-scripts)
+14. [Project File Structure](#project-file-structure)
+15. [API Endpoints Reference](#api-endpoints-reference)
+16. [Troubleshooting & FAQ](#troubleshooting--faq)
+17. [License](#license)
 
 ---
 
-## Key Features
+## Key Features & Capabilities
 
-* **Log Analyzer & Sanitization Engine**: Upload raw CyberArk component logs (`itaso001.log`, `pm_error.log`, `PSMTrace.log`, etc.). Automatically redacts passwords, session tokens, private IP addresses, hostnames, and safe names before analysis.
-* **Curated PAM Error Catalog**: Fast lookup across 120+ authentic CyberArk PAM return codes and error codes with root causes, diagnostic checklists, and verified recovery procedures.
-* **AI-Assisted Diagnostics**: Uses the Google Gen AI TypeScript SDK (`@google/genai`) to synthesize diagnostic runbooks with step-by-step resolution paths and official doc references.
-* **Collaborative Local Knowledge Base**: Markdown and WYSIWYG rich text editor with syntax highlighting, callout boxes, checklists, and document export to Word (`.doc`), PDF, and Markdown.
-* **Role-Based Access Control (RBAC)**: Built-in system roles (`Admin`, `Engineer`, `Reader`) plus granular custom role definitions across 17 distinct privileges.
-* **Enterprise Authentication**: Simulators for Local PAM credentials, Active Directory / LDAP group-to-role mappings, SAML 2.0 Single Sign-On with JIT provisioning, and email invitation links.
-* **Security Advisories & Release Tracker**: Tracks active CVE bulletins, LTS releases, end-of-life schedules, and platform upgrade compatibility.
+### 1. 🛡️ Log Analyzer & Automatic PII/Secret Redaction Engine
+* Supports all primary CyberArk logs: `itaso001.log`, `pm_error.log`, `pm.log`, `PSMTrace.log`, `PSMConsole.log`, `CyberArk.WebConsole.log`, `APPConsole.log`, and `SecureTunnel.log`.
+* Automatic regex-based masking of clear-text passwords, session tokens, private RFC-1918 IPv4 and IPv6 addresses, server hostnames, and safe identifiers.
+* Identifies primary error codes, severity levels, affected components, and recommended remediation checklists.
+* Export sanitized logs directly for audit compliance or vendor support cases.
+
+### 2. ⚡ PSM Universal Connector Studio & WebForm Dispatcher Builder
+* **Live DOM Analyzer**: Inspects real web application login pages and extracts input fields, submit buttons, password toggles, and verification headers.
+* **CyberArk WebFormFields Auto-Generation**: Builds syntactically valid sequences formatted for `CyberArk.Extensions.Plugin.WebAppDispatcher` (e.g. `username > (SearchBy=id) [Target]`, `password > (SearchBy=id) [Target]`, `submit > (Button)`).
+* **SSRF-Hardened Live Scanner**: Deep security controls preventing Server-Side Request Forgery (CWE-918), validating target hosts against public DNS and dynamic domain allowlists.
+* **Custom Domain Management**: Allows administrators to dynamically authorize enterprise login domains (e.g., AWS IAM, Azure Portal, Okta, internal apps) for live scanning with one-click approval.
+* **Multi-Format Export**: Generates CyberArk AutoIt (`.au3`) scripts, XML connection component definitions, and JSON profiles.
+
+### 3. 📖 Curated PAM Error Catalog & Diagnostic Wizard
+* **120+ Authentic Error Codes**: Comprehensive coverage across Vault (`ITATS`), CPM (`CACPM`), PSM (`PSMSR`), PVWA (`PASWS`), CCP (`APPAP`), PTA, and Conjur.
+* **Interactive Diagnostic Wizard**: Step-by-step triage based on observed operational symptoms (e.g. credential rotation failure, connection drop, AppLocker execution block, certificate desync).
+* **Direct Community & Docs Cross-Referencing**: Verified official resolution procedures linked directly to CyberArk technical docs and community advisories.
+
+### 4. 🧠 Grounded AI Diagnostics & Offline Fallback Runbooks
+* Integrated with Google Gen AI TypeScript SDK (`@google/genai`) using `gemini-3.8-flash` with Google Search grounding.
+* **Offline Fallback Intelligence**: Operates seamlessly even without an external API key by synthesizing verified internal runbooks for all known error codes.
+* One-click promotion of AI diagnoses into the curated organization-wide error catalog.
+
+### 5. 📚 Collaborative SOP Knowledge Base
+* Markdown and WYSIWYG rich text editor with syntax highlighting, callout alert boxes, collapsible sections, and diagnostic checklists.
+* **XSS Neutralization (CWE-79)**: Multi-pass HTML sanitizer stripping all unsafe elements, inline JavaScript, and invalid URI schemes.
+* Single-click document export to Microsoft Word (`.doc`), PDF, and raw Markdown (`.md`).
+
+### 6. 🔐 Enterprise Identity & Granular Role-Based Access Control (RBAC)
+* **17 Granular Privileges**: Control access over log analysis, runbook publishing, error promotion, user management, LDAP settings, and connector design.
+* **Custom Role Matrix Builder**: Create tailored enterprise roles beyond built-in `admin`, `engineer`, and `reader`.
+* **Enterprise Auth Simulators**: Test Local credentials, Active Directory / LDAP group-to-role mappings, SAML 2.0 Single Sign-On with JIT provisioning, and email invitation links.
+
+### 7. 🔔 Live CVE Advisories & CyberArk Release Tracker
+* Real-time tracking of active PAM security bulletins, CVEs, and mitigation patches.
+* Version tracking and release note sync for **PAM Self-Hosted (15.2.0)** and **Privilege Cloud (15.0.3)**.
 
 ---
 
 ## Architecture Overview
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                   VaultDesk Frontend                   │
-│        React 19 + TypeScript + Tailwind CSS v4         │
-│   (Vite 8 Bundler • Lucide Icons • Motion Animations)  │
-└──────────────────────────┬─────────────────────────────┘
-                           │ HTTP / REST APIs (Port 3000)
-┌──────────────────────────▼─────────────────────────────┐
-│                 VaultDesk Express Server               │
-│          server.ts (Node.js runtime via TSX)           │
-│                                                        │
-│  • Security Headers (CWE-693)                          │
-│  • In-Memory Rate Limiting (CWE-400)                   │
-│  • Session & RBAC Enforcement (OWASP API 5)            │
-│  • Crypto-Secure Tokens (crypto.randomUUID)            │
-│  • PII & Secret Redaction (logAnalyzer.ts)             │
-│  • @google/genai SDK (Gemini AI API Proxy)             │
-└────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           VaultDesk Client                              │
+│                React 19 + TypeScript + Tailwind CSS v4                  │
+│        (Vite 8 Bundler • Lucide Icons • Motion Transitions)             │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │ HTTP / REST APIs (Port 3000)
+┌────────────────────────────────────▼────────────────────────────────────┐
+│                        VaultDesk Express Backend                        │
+│                   server.ts (Node.js runtime via TSX)                   │
+│                                                                         │
+│  • HTTP Security Headers (CWE-693)                                      │
+│  • In-Memory Endpoint Rate Limiting (CWE-400)                           │
+│  • Session & RBAC Permission Enforcement (OWASP API 5)                  │
+│  • Cryptographically Secure Tokens (crypto.randomUUID)                  │
+│  • SSRF-Hardened Domain Allowlist & DNS Resolver (CWE-918)              │
+│  • Client/Server PII & Secret Redaction Engine                          │
+│  • @google/genai SDK (Gemini AI Live Search Grounding)                  │
+│  • Offline High-Fidelity PAM Runbook Synthesizer                        │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -71,13 +139,13 @@
 ## Operating System & Hardware Requirements
 
 ### Supported Operating Systems
-| Operating System | Supported Versions | Architecture | Primary Shell |
+| Operating System | Supported Versions | Architecture | Default Shell |
 | :--- | :--- | :--- | :--- |
 | **Linux** | Ubuntu 20.04/22.04/24.04 LTS, Debian 11/12, Fedora 38+, RHEL/Rocky/Alma 8/9, Arch Linux | x86_64, ARM64 | Bash / Zsh |
 | **Windows** | Windows 10 (21H2+) or Windows 11 | x86_64, ARM64 | PowerShell 5.1+ / PowerShell 7+ / WSL2 |
 | **macOS** | macOS 12 Monterey, 13 Ventura, 14 Sonoma, 15 Sequoia | Apple Silicon (M1–M4) & Intel | Zsh / Bash |
 
-### Minimum Hardware Specifications
+### Hardware Specifications
 * **CPU**: 2 physical cores or virtual vCPUs (x86_64 or ARM64)
 * **RAM**: 2 GB minimum (4 GB recommended for compiling Vite/React production builds)
 * **Disk Storage**: 500 MB free disk space (includes `node_modules` and build output)
@@ -85,17 +153,17 @@
 
 ---
 
-## Complete Step-by-Step Installation Guides by OS
+## Complete Step-by-Step Installation Guides
 
 Choose your operating system below for tailored, copy-pasteable installation instructions:
 
-* [Guide A: Linux (Ubuntu / Debian / RHEL / Fedora)](#guide-a-linux-installation-ubuntu--debian--rhel--fedora)
-* [Guide B: Windows 10 & 11 (PowerShell / Command Prompt)](#guide-b-windows-10--11-installation-powershell)
+* [Guide A: Linux (Ubuntu / Debian / RHEL / Fedora / Arch)](#guide-a-linux-installation-ubuntu--debian--rhel--fedora--arch)
+* [Guide B: Windows 10 & 11 (PowerShell / WSL2)](#guide-b-windows-10--11-installation-powershell)
 * [Guide C: macOS (Apple Silicon M1-M4 & Intel Mac)](#guide-c-macos-installation-apple-silicon--intel)
 
 ---
 
-### Guide A: Linux Installation (Ubuntu / Debian / RHEL / Fedora)
+### Guide A: Linux Installation (Ubuntu / Debian / RHEL / Fedora / Arch)
 
 #### Step 1: Install System Prerequisites (Git, Curl, Build Tools)
 
@@ -150,15 +218,15 @@ git --version# Should print git version 2.30+
 
 #### Step 4: Clone the Repository
 ```bash
-git clone https://github.com/your-username/vaultdesk-pam-portal.git
-cd vaultdesk-pam-portal
+git clone https://github.com/LegendGamer007-git/VaultDesk.git
+cd VaultDesk
 ```
 
 #### Step 5: Configure Environment Variables
 ```bash
 cp .env.example .env
 ```
-*(Optional)* If you have a Gemini API key for live AI log analysis, edit `.env`:
+*(Optional)* If you have a Gemini API key for live search-grounded diagnostics, edit `.env`:
 ```bash
 nano .env
 # Set: GEMINI_API_KEY="your-actual-api-key"
@@ -191,7 +259,7 @@ http://localhost:3000
 
 ### Guide B: Windows 10 & 11 Installation (PowerShell)
 
-You can run VaultDesk on Windows either natively via **Windows PowerShell** or inside **WSL2 (Windows Subsystem for Linux)**. Below is the native Windows installation.
+You can run VaultDesk on Windows natively via **Windows PowerShell** or inside **WSL2 (Windows Subsystem for Linux)**. Below is the native Windows installation.
 
 #### Step 1: Open PowerShell as Administrator
 Press `Win + X` and select **Terminal (Admin)** or **Windows PowerShell (Admin)**.
@@ -228,8 +296,8 @@ git --version# Expected: git version 2.x+
 
 #### Step 5: Clone the Repository
 ```powershell
-git clone https://github.com/your-username/vaultdesk-pam-portal.git
-cd vaultdesk-pam-portal
+git clone https://github.com/LegendGamer007-git/VaultDesk.git
+cd VaultDesk
 ```
 
 #### Step 6: Configure Environment Variables
@@ -302,8 +370,8 @@ git --version# Expected: git version 2.x+
 
 #### Step 6: Clone the Repository
 ```bash
-git clone https://github.com/your-username/vaultdesk-pam-portal.git
-cd vaultdesk-pam-portal
+git clone https://github.com/LegendGamer007-git/VaultDesk.git
+cd VaultDesk
 ```
 
 #### Step 7: Configure Environment Variables
@@ -337,20 +405,65 @@ open http://localhost:3000
 
 ---
 
+## Quick Installation Commands by OS
+
+### Linux Quick-Start (Ubuntu / Debian)
+```bash
+sudo apt update && sudo apt install -y git curl build-essential
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs
+git clone https://github.com/LegendGamer007-git/VaultDesk.git
+cd VaultDesk
+npm install && cp .env.example .env && npm run dev
+```
+
+### Windows Quick-Start (PowerShell)
+```powershell
+winget install --id Git.Git -e --source winget
+winget install --id OpenJS.NodeJS.LTS -e --source winget
+git clone https://github.com/LegendGamer007-git/VaultDesk.git
+cd VaultDesk
+npm install; Copy-Item .env.example .env; npm run dev
+```
+
+### macOS Quick-Start (Terminal & Homebrew)
+```bash
+brew install git node@22 && brew link node@22 --force --overwrite
+git clone https://github.com/LegendGamer007-git/VaultDesk.git
+cd VaultDesk
+npm install && cp .env.example .env && npm run dev
+```
+
+---
+
 ## Logging In & Default User Credentials
 
 Once the application is running, the **VaultDesk Login Portal** will greet you. You can authenticate using any of the built-in identities:
 
 | Account Type | Email Address | Role | Description |
 | :--- | :--- | :--- | :--- |
-| **Administrator** | `admin@vaultdesk.internal` | `admin` | Full system access: manage users, custom RBAC permissions, promote AI entries, and configure SSO. |
-| **PAM Operations Engineer** | `engineer@vaultdesk.internal` | `engineer` | Author runbooks, parse/anonymize logs, triage errors, and trigger updates sync. |
+| **Administrator** | `admin@vaultdesk.internal` | `admin` | Full system access: manage users, custom RBAC permissions, configure SSO/LDAP, approve scanner domains. |
+| **PAM Operations Engineer** | `engineer@vaultdesk.internal` | `engineer` | Author runbooks, parse/anonymize logs, triage errors, and build PSM web connectors. |
 | **Compliance Auditor (Reader)** | `reader@vaultdesk.internal` | `reader` | Read-only access: view curated runbooks, error codes, and export reports to Word/PDF. |
 
-You can also test enterprise identity flows:
-* **Active Directory / LDAP**: Switch to the **Active Directory / LDAP** tab to test domain credential binding.
-* **SAML 2.0 Single Sign-On**: Switch to the **SAML 2.0 SSO** tab to simulate identity provider assertion and Just-In-Time (JIT) provisioning.
-* **Invitation Token**: Switch to the **Accept Invite** tab with token `inv-tok-9842f1a8` to test onboarding.
+### Testing Enterprise Identity Workflows
+* **Active Directory / LDAP**: Switch to the **Active Directory / LDAP** tab to test domain credential binding and automated role assignment.
+* **SAML 2.0 Single Sign-On**: Switch to the **SAML 2.0 SSO** tab to simulate identity provider assertion and Just-In-Time (JIT) user provisioning.
+* **Invitation Token**: Switch to the **Accept Invite** tab with token `inv-tok-9842f1a8` to test frictionless onboarding.
+
+---
+
+## PSM Connector Studio & WebForm Generator Guide
+
+VaultDesk includes a dedicated **PSM Universal Web Connector Studio** accessible via the top navigation bar.
+
+### Key Capabilities:
+1. **Target URL Scanning**: Enter any enterprise login URL (e.g. `https://signin.aws.amazon.com/signin`, `https://portal.azure.com`, `https://login.wordpress.org`).
+2. **Dynamic Domain Authorization**: VaultDesk enforces strict SSRF protections. Public domains can be auto-authorized on the fly or managed in the **Allowed Scanner Domains** modal.
+3. **DOM Element Extraction**: Automatically identifies username fields, password inputs, submit buttons, OTP fields, and validation elements.
+4. **AutoIt & XML Generation**: Copy or download ready-to-deploy CyberArk connection components:
+   * **WebFormFields sequence**: `username > (SearchBy=id) [Target]`, `password > (SearchBy=id) [Target]`, `submit > (Button)`.
+   * **AutoIt `.au3` dispatcher script**: Full boilerplate including browser launch, process locking, and error handling.
+   * **PVWA XML Profile**: Importable XML configuration for direct upload into PVWA Administration > Connection Components.
 
 ---
 
@@ -379,7 +492,7 @@ npm start
 
 The build command outputs:
 * `dist/`: Minified static HTML, CSS, and JS frontend assets.
-* `dist/server.cjs`: Bundled, standalone Node.js CommonJS server script.
+* `dist/server.cjs`: Standalone Node.js CommonJS server script.
 
 To clean previous build outputs:
 ```bash
@@ -390,37 +503,36 @@ npm run clean
 
 ## Security Hardening & Scan Compliance
 
-VaultDesk has been engineered to pass enterprise static code scans and dependency audits:
+VaultDesk has been engineered from the ground up to satisfy enterprise security audits, static analysis tools (SAST), and strict supply-chain checks:
 
-### 1. Zero Known Vulnerabilities (`npm audit`)
-* Dependency versions are aligned with Vite 8 and React 19.
-* Continuous dependency vulnerability auditing via `npm audit` reports **0 vulnerabilities**.
+### 1. 0 Known Vulnerabilities (`npm audit`)
+* Dependency tree is aligned with Vite 8 and React 19.
+* Zero reported vulnerabilities in `npm audit` across all dependencies.
 
-### 2. Cross-Site Scripting (XSS / CWE-79) Neutralization
+### 2. GitHub CodeQL SAST Zero-Alert Compliance
+* Full compliance with CodeQL JavaScript/TypeScript rule suites.
+* **SSRF (CWE-918 / `js/request-forgery`)**: Resolved by strictly binding outbound HTTP requests to validated domain allowlists (`INITIAL_APPROVED_DOMAINS` and `customApprovedDomainsDb`) with DNS IP verification preventing loopback/RFC-1918 tunneling.
+* **Missing Rate Limiting (CWE-400 / `js/missing-rate-limiting`)**: All public and sensitive endpoints (`/api/auth/*`, `/api/ai/*`, `/api/connectors/*`, `/api/logs/*`, `/api/readme`) are protected with dedicated in-memory token bucket rate limiters.
+
+### 3. Cross-Site Scripting Neutralization (CWE-79)
 * The Rich Text Runbook editor (`src/components/RichTextEditor.tsx`) implements a multi-pass HTML sanitizer (`sanitizeHtmlOutput`).
 * Strips all executable tags (`<script>`, `<iframe>`, `<object>`, `<embed>`, `<applet>`, `<style>`).
 * Strips dangerous URI schemes (`javascript:`, `vbscript:`, `data:text/html`).
 * Strips all inline JavaScript event handlers (`onload`, `onerror`, `onclick`, etc.).
 
-### 3. Cryptographically Secure Tokens (CWE-330 / CWE-384)
+### 4. Cryptographically Secure Tokens (CWE-330 / CWE-384)
 * Authentication session tokens and email invitation tokens are generated using Node.js's native `crypto.randomUUID()` instead of pseudorandom numbers (`Math.random`).
 
-### 4. Server-Side RBAC Enforcement (OWASP API 5 / BFLA)
+### 5. Server-Side RBAC Enforcement (OWASP API 5 / BFLA)
 * Mutating API endpoints (`POST /api/users`, `DELETE /api/users/:id`, `PUT /api/roles/:id`, `POST /api/kb`, `PUT /api/auth/ldap`) validate bearer authentication and inspect the user's role and granular permissions server-side.
 * Unauthorized callers receive `401 Unauthorized` or `403 Forbidden`.
 
-### 5. HTTP Security Headers (CWE-693)
+### 6. HTTP Security Headers (CWE-693)
 The Express server automatically emits security headers on all responses:
 * `X-Content-Type-Options: nosniff` (Prevents MIME-type sniffing attacks)
 * `X-Frame-Options: SAMEORIGIN` (Protects against clickjacking)
 * `X-XSS-Protection: 1; mode=block` (Enforces legacy browser XSS filters)
 * `Referrer-Policy: strict-origin-when-cross-origin` (Safeguards internal URLs)
-
-### 6. Rate Limiting & Resource Protection (CWE-400)
-* Built-in in-memory rate limiting shields sensitive routes (`/api/auth/login`, `/api/ai/diagnose`, `/api/analyze-log`) against brute-force attacks and resource exhaustion.
-
-### 7. Secret Scanning & Mock Fixtures (Gitleaks / TruffleHog)
-* Seed data containing mock X.509 IdP certificates includes `# gitleaks:allow` annotations and `.gitleaksignore` whitelist rules to prevent false-positive alerts during GitHub push protection.
 
 ---
 
@@ -478,7 +590,7 @@ The repository includes `.github/workflows/ci-security.yml`, which automatically
 ├── index.html                 # HTML entry point with metadata
 ├── package.json               # Dependencies and build scripts
 ├── package-lock.json          # Locked dependency tree for deterministic builds
-├── server.ts                  # Express backend: APIs, RBAC, Gemini proxy, rate limiting
+├── server.ts                  # Express backend: APIs, RBAC, Gemini proxy, SSRF defenses
 ├── tsconfig.json              # TypeScript compilation config
 ├── vite.config.ts             # Vite frontend bundler config
 └── src/
@@ -496,6 +608,8 @@ The repository includes `.github/workflows/ci-security.yml`, which automatically
     │   ├── LoginView.tsx                  # 4-mode authentication & invite acceptance
     │   ├── MarketplaceBrowser.tsx         # CyberArk plugins and integrations
     │   ├── Navbar.tsx                     # Header navigation, demo switcher, search
+    │   ├── PsmConnectorStudio.tsx         # PSM Web Connector Studio & Dispatcher builder
+    │   ├── ReadmeModal.tsx                # In-app README viewer and exporter
     │   ├── RichTextEditor.tsx             # Sanitized Markdown / WYSIWYG editor
     │   ├── SettingsView.tsx               # System preferences & telemetry config
     │   ├── TrendingIssuesWidget.tsx       # Trending PAM alerts widget
@@ -537,14 +651,32 @@ The repository includes `.github/workflows/ci-security.yml`, which automatically
 
 ### Diagnostics & Log Analysis
 * `POST /api/analyze-log` — Parse and triage raw CyberArk logs with automatic sanitization (`logs:analyze`).
-* `POST /api/ai/diagnose` — Synthesize AI resolution using Gemini with search grounding.
+* `POST /api/logs/save` — Save sanitized log entry to server database.
+* `GET /api/logs/saved` — List saved sanitized logs.
+* `DELETE /api/logs/saved/:id` — Delete saved sanitized log.
+* `POST /api/ai/diagnose` — Synthesize AI resolution using Gemini with search grounding or offline fallback.
 * `POST /api/errors` — Promote AI diagnosis into curated error database (`troubleshoot:promote_ai`).
+
+### PSM Web Connectors & WebForm Generator
+* `GET /api/connectors` — List all custom PSM Web Connectors.
+* `GET /api/connectors/:id` — Get single connector definition.
+* `POST /api/connectors` — Create or update PSM connector.
+* `DELETE /api/connectors/:id` — Delete PSM connector.
+* `POST /api/connectors/generate-webform` — Scan live URL/DOM with SSRF protection & synthesize WebFormFields.
+* `GET /api/connectors/allowed-domains` — List approved target scanner domains.
+* `POST /api/connectors/allowed-domains` — Authorize a new target domain for live scanning.
 
 ### Knowledge Base & Runbooks
 * `GET /api/kb` — Query runbooks with space, component, and keyword filters.
+* `GET /api/kb/:id` — Retrieve full runbook article by ID or slug.
 * `POST /api/kb` — Publish new knowledge article (`kb:write`).
 * `PUT /api/kb/:id` — Update article content (`kb:write`).
 * `DELETE /api/kb/:id` — Archive article (`kb:delete`).
+* `POST /api/kb/:id/vote` — Upvote helpfulness of an article.
+
+### README & Documentation
+* `GET /api/readme` — Retrieve README.md content as JSON.
+* `GET /api/download/readme` — Download raw README.md file directly.
 
 ---
 
@@ -566,7 +698,11 @@ npm install --legacy-peer-deps
 *(The repository's `package.json` and `package-lock.json` have already been resolved for full compatibility with Vite 8 and React 19).*
 
 ### Q3: How do I test the Gemini AI feature without an API key?
-**Answer**: An API key is optional. When `GEMINI_API_KEY` is not present, VaultDesk automatically queries its pre-indexed offline knowledge database containing 120+ verified CyberArk runbooks and troubleshooting checklists without failing.
+**Answer**: An API key is completely optional. When `GEMINI_API_KEY` is not present, VaultDesk automatically queries its pre-indexed offline knowledge database containing 120+ verified CyberArk runbooks and troubleshooting checklists without failing.
+
+### Q4: Target domain rejected during PSM Connector live scan
+**Cause**: VaultDesk enforces strict SSRF protections to prevent server-side request forgery against private networks.  
+**Solution**: In the **PSM Connector Studio**, enable the **"Auto-authorize domain"** toggle, or click **"Allowed Domains"** to add your target enterprise host to the approved scanner list.
 
 ---
 
