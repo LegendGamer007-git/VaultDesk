@@ -611,28 +611,25 @@ ${(err.logsToCheck || []).join('\n')}`;
     <div className="space-y-8">
       {/* Interactive Diagnostic Wizard Callout Banner */}
       {onOpenWizard && (
-        <div className="relative overflow-hidden rounded-[14px] bg-[#12151C] border border-[#232833] border-l-[3px] border-l-[#0A84FF] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.4)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="relative overflow-hidden rounded-2xl liquid-glass-elevated p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-10 h-10 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] flex items-center justify-center shrink-0 text-[#0A84FF]">
+            <div className="w-10 h-10 rounded-xl bg-[#0A84FF]/15 border border-[#0A84FF]/30 flex items-center justify-center shrink-0 text-[#0A84FF]">
               <Wand2 className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-[#F5F6F8] text-sm sm:text-base">
-                  Interactive Step-by-Step Diagnostic Wizard & Log Analyzer
-                </span>
-                <span className="px-2 py-0.5 rounded-[6px] text-[10px] font-semibold bg-[#1A1E27] text-[#64D2FF] border border-[#2E3440]">
-                  Interactive
+                <span className="font-bold text-[var(--text-primary)] text-sm sm:text-base tracking-tight">
+                  Interactive Diagnostic Wizard & Log Analyzer
                 </span>
               </div>
-              <p className="text-xs text-[#A6AEC0] mt-0.5">
-                Guided triage based on PAM component selection, or upload/paste raw logs from itaso001.log, pm_error.log, PSMTrace.log to pinpoint root causes & solutions.
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+                Guided triage based on PAM component selection, or upload/paste raw logs from <code className="font-mono text-[#0A84FF]">itaso001.log</code>, <code className="font-mono text-[#0A84FF]">pm_error.log</code>, <code className="font-mono text-[#0A84FF]">PSMTrace.log</code> to pinpoint root causes & solutions.
               </p>
             </div>
           </div>
           <button
             onClick={onOpenWizard}
-            className="flex items-center gap-2 px-4 py-2 rounded-[10px] bg-[#0A84FF] hover:bg-[#3B9EFF] text-white text-xs font-semibold transition-all shadow-[0_1px_2px_rgba(0,0,0,0.4)] shrink-0 self-start sm:self-auto"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0A84FF] hover:bg-[#3B9EFF] text-white text-xs font-semibold transition-all shadow-md shrink-0 self-start sm:self-auto cursor-pointer active:scale-95"
           >
             <span>Launch Wizard & Analyzer</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -641,9 +638,9 @@ ${(err.logsToCheck || []).join('\n')}`;
       )}
 
       {/* Auto-Update & Knowledge Synchronization Status Bar */}
-      <div className="rounded-[14px] bg-[#12151C] border border-[#232833] p-4 shadow-[0_1px_2px_rgba(0,0,0,0.4)] space-y-3">
+      <div className="rounded-2xl liquid-glass p-4 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 text-xs">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
                 <span
@@ -657,14 +654,14 @@ ${(err.logsToCheck || []).join('\n')}`;
                   }`}
                 />
               </span>
-              <span className="text-xs font-semibold text-[#F5F6F8]">
+              <span className="font-semibold text-[var(--text-primary)]">
                 Troubleshooting KB Auto-Update:
               </span>
               <span
-                className={`text-xs px-2 py-0.5 rounded-[6px] font-mono font-bold ${
+                className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-bold ${
                   isAutoSyncEnabled
-                    ? 'bg-[#12241A] text-[#30D158] border border-[#30D158]/40'
-                    : 'bg-[#12151C] text-[#6E7787] border border-[#2E3440]'
+                    ? 'bg-[#30D158]/15 text-[#30D158] border border-[#30D158]/30'
+                    : 'bg-black/10 dark:bg-white/10 text-[var(--text-tertiary)]'
                 }`}
               >
                 {isAutoSyncEnabled ? 'ACTIVE (Polling Every 60s)' : 'PAUSED'}
