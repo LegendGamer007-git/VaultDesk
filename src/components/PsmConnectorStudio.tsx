@@ -76,6 +76,11 @@ export const PsmConnectorStudio: React.FC<PsmConnectorStudioProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<WebFormAnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [autoAuthorizeDomain, setAutoAuthorizeDomain] = useState<boolean>(true);
+  const [showAllowedDomainsModal, setShowAllowedDomainsModal] = useState<boolean>(false);
+  const [allowedDomainsList, setAllowedDomainsList] = useState<string[]>([]);
+  const [newDomainInput, setNewDomainInput] = useState<string>('');
+  const [isAddingDomain, setIsAddingDomain] = useState<boolean>(false);
 
   // Copy & Toast state
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -169,6 +174,54 @@ export const PsmConnectorStudio: React.FC<PsmConnectorStudioProps> = ({
 </form>`,
   };
 
+  // Load pre-approved scanner domains
+  const fetchAllowedDomains = async () => {
+    try {
+      const res = await fetch('/api/connectors/allowed-domains');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.domains)) {
+          setAllowedDomainsList(data.domains);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchAllowedDomains();
+  }, []);
+
+  const handleAddCustomDomain = async (domainToAdd?: string) => {
+    const domain = (domainToAdd || newDomainInput).trim().toLowerCase();
+    if (!domain) return;
+    setIsAddingDomain(true);
+    try {
+      const res = await fetch('/api/connectors/allowed-domains', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAllowedDomainsList(data.domains);
+        setNewDomainInput('');
+        showToast(`Domain '${domain}' added to authorized PAM scanner list!`);
+        if (domainToAdd) {
+          handleAnalyzeUrl();
+        }
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Failed to authorize domain.');
+      }
+    } catch {
+      showToast('Failed to authorize domain.');
+    } finally {
+      setIsAddingDomain(false);
+    }
+  };
+
   // Analyze URL and generate WebFormFields
   const handleAnalyzeUrl = async () => {
     if (!inputUrl || !inputUrl.trim()) {
@@ -197,6 +250,7 @@ export const PsmConnectorStudio: React.FC<PsmConnectorStudioProps> = ({
         body: JSON.stringify({
           targetUrl: cleanUrl,
           rawHtml: htmlToInspect || undefined,
+          autoAuthorize: autoAuthorizeDomain,
         }),
       });
 
@@ -627,6 +681,28 @@ ${webFormFields}
                       {analysisError}
                     </p>
                   )}
+
+                  {/* Domain Authorization Controls */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-xs">
+                    <label className="flex items-center gap-2 text-[#A6AEC0] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={autoAuthorizeDomain}
+                        onChange={(e) => setAutoAuthorizeDomain(e.target.checked)}
+                        className="rounded bg-[#0B0E14] border-[#2E3440] text-[#0A84FF] focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                      />
+                      <span>Auto-authorize public target domain for live scanning</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAllowedDomainsModal(true)}
+                      className="inline-flex items-center gap-1.5 text-[#64D2FF] hover:text-[#0A84FF] font-medium transition-colors cursor-pointer"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Allowed Scanner Domains ({allowedDomainsList.length || '40+'})</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Preset Fast-Pickers */}
@@ -1441,6 +1517,90 @@ ${webFormFields}
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Allowed Scanner Domains Modal */}
+      {showAllowedDomainsModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#12151C] border border-[#2E3440] rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-[#232833]">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-[#0A84FF]/10 text-[#0A84FF]">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[#F5F6F8]">Authorized PAM Scanner Domains</h3>
+                  <p className="text-xs text-[#A6AEC0]">Domains permitted for live backend DOM inspection & WebForm synthesis</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAllowedDomainsModal(false)}
+                className="p-1.5 rounded-lg text-[#A6AEC0] hover:text-[#F5F6F8] hover:bg-[#1A1E27] cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Add Custom Domain Input */}
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-[#A6AEC0] uppercase tracking-wider">
+                Add Custom Enterprise Domain or Application URL
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newDomainInput}
+                  onChange={(e) => setNewDomainInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddCustomDomain();
+                  }}
+                  placeholder="e.g. login.wordpress.org, portal.corp.local, *.mycompany.com"
+                  className="flex-1 px-3.5 py-2.5 bg-[#0B0E14] border border-[#2E3440] rounded-xl text-xs text-[#F5F6F8] placeholder-[#5A6478] focus:outline-none focus:border-[#0A84FF] font-mono"
+                />
+                <button
+                  onClick={() => handleAddCustomDomain()}
+                  disabled={!newDomainInput.trim() || isAddingDomain}
+                  className="px-4 py-2.5 rounded-xl bg-[#0A84FF] hover:bg-[#0070E0] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isAddingDomain ? 'Adding...' : 'Add Domain'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Domain Badges Cloud */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-[#A6AEC0] uppercase tracking-wider flex items-center justify-between">
+                <span>Active Authorized Domains ({allowedDomainsList.length || '40+'})</span>
+                <span className="text-[11px] text-[#30D158] font-mono font-normal">SSRF & DNS Verified</span>
+              </div>
+              <div className="p-3 bg-[#0B0E14] border border-[#232833] rounded-xl max-h-56 overflow-y-auto flex flex-wrap gap-1.5">
+                {(allowedDomainsList.length > 0 ? allowedDomainsList : [
+                  'wordpress.org', 'wordpress.com', 'signin.aws.amazon.com', 'portal.azure.com', 'login.microsoftonline.com',
+                  'accounts.google.com', 'github.com', 'gitlab.com', 'salesforce.com', 'service-now.com',
+                  'okta.com', 'atlassian.net', 'vmware.com', 'cyberark.com', 'oracle.com', 'splunk.com', 'slack.com', 'zoom.us'
+                ]).map((dom) => (
+                  <span
+                    key={dom}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1A1E27] border border-[#2E3440] text-[11px] font-mono text-[#64D2FF]"
+                  >
+                    <Check className="w-3 h-3 text-[#30D158]" />
+                    {dom}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowAllowedDomainsModal(false)}
+                className="px-4 py-2 rounded-xl bg-[#1A1E27] hover:bg-[#232833] border border-[#2E3440] text-xs font-semibold text-[#F5F6F8] cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

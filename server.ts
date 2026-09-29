@@ -2367,19 +2367,29 @@ const BLOCKED_HOST_SET = new Set([
   'instance-data',
 ]);
 
-const APPROVED_ENTERPRISE_HOSTS = [
+const INITIAL_APPROVED_DOMAINS = [
+  'wordpress.org',
+  'wordpress.com',
   'signin.aws.amazon.com',
   'console.aws.amazon.com',
+  'amazon.com',
+  'aws.amazon.com',
   'portal.azure.com',
+  'azure.com',
+  'microsoft.com',
   'login.microsoftonline.com',
   'accounts.google.com',
+  'google.com',
   'github.com',
   'gitlab.com',
+  'bitbucket.org',
+  'salesforce.com',
   'login.salesforce.com',
-  'httpbin.org',
-  'cyberark.com',
   'service-now.com',
   'atlassian.net',
+  'atlassian.com',
+  'jira.com',
+  'confluence.com',
   'okta.com',
   'vmware.com',
   'oracle.com',
@@ -2388,20 +2398,64 @@ const APPROVED_ENTERPRISE_HOSTS = [
   'slack.com',
   'zoom.us',
   'zendesk.com',
+  'hubspot.com',
+  'shopify.com',
+  'cloudflare.com',
+  'auth0.com',
+  'onelogin.com',
+  'pingidentity.com',
+  'duo.com',
+  'hashicorp.com',
+  'docker.com',
+  'digitalocean.com',
+  'linode.com',
+  'notion.so',
+  'figma.com',
+  'airtable.com',
+  'dropbox.com',
+  'box.com',
+  'stripe.com',
+  'paypal.com',
+  'cyberark.com',
+  'httpbin.org',
+  'example.com',
 ];
 
-const APPROVED_HOSTS_SET = new Set(APPROVED_ENTERPRISE_HOSTS);
+const customApprovedDomainsDb: string[] = [...INITIAL_APPROVED_DOMAINS];
+const customApprovedDomainsSet = new Set<string>(INITIAL_APPROVED_DOMAINS);
 
 function isApprovedTargetHost(hostname: string): boolean {
-  if (APPROVED_HOSTS_SET.has(hostname)) {
+  if (customApprovedDomainsSet.has(hostname)) {
     return true;
   }
-  for (const domain of APPROVED_ENTERPRISE_HOSTS) {
-    if (hostname.endsWith('.' + domain)) {
+  for (const domain of customApprovedDomainsDb) {
+    if (hostname === domain || hostname.endsWith('.' + domain)) {
       return true;
     }
   }
   return false;
+}
+
+function addApprovedTargetDomain(rawDomain: string): boolean {
+  const clean = rawDomain
+    .toLowerCase()
+    .trim()
+    .replace(/^https?:\/\//, '')
+    .split('/')[0]
+    .replace(/^\*\./, '');
+  if (!clean || BLOCKED_HOST_SET.has(clean)) {
+    return false;
+  }
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(clean)) {
+    if (isPrivateIPv4(clean)) {
+      return false;
+    }
+  }
+  if (!customApprovedDomainsSet.has(clean)) {
+    customApprovedDomainsSet.add(clean);
+    customApprovedDomainsDb.unshift(clean);
+  }
+  return true;
 }
 
 const SAFE_DOMAIN_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,24}$/;
@@ -2429,14 +2483,6 @@ async function validateUrlForSsrf(targetUrl: string): Promise<{ valid: boolean; 
       cleanHostname.endsWith('.local')
     ) {
       return { valid: false, reason: `Target host '${cleanHostname}' is restricted by PAM SSRF security policy.` };
-    }
-
-    // Host allowlist validation (CWE-918 / js/request-forgery sanitizer)
-    if (!isApprovedTargetHost(cleanHostname)) {
-      return {
-        valid: false,
-        reason: `Target host '${cleanHostname}' is outside pre-approved PAM scanner list. To inspect, paste HTML in DOM Inspector tab (CWE-918).`,
-      };
     }
 
     // Domain regex pattern validation
@@ -2479,6 +2525,14 @@ async function validateUrlForSsrf(targetUrl: string): Promise<{ valid: boolean; 
       return { valid: false, reason: `DNS resolution failed for '${cleanHostname}': ${dnsErr.message || 'Domain not found'}` };
     }
 
+    // Host allowlist validation (CWE-918 / js/request-forgery sanitizer)
+    if (!isApprovedTargetHost(cleanHostname)) {
+      return {
+        valid: false,
+        reason: `Target host '${cleanHostname}' is outside pre-approved PAM scanner list. To inspect, click 'Authorize Domain & Scan' or paste HTML in DOM Inspector tab (CWE-918).`,
+      };
+    }
+
     const safeUrl = new URL(parsed.pathname + parsed.search, `${safeProtocol}//${cleanHostname}`).href;
     return { valid: true, safeUrl };
   } catch (err: any) {
@@ -2504,15 +2558,10 @@ async function fetchRealLoginPageHtml(
     const parsed = new URL(currentUrl);
     const hostToCheck = parsed.hostname.toLowerCase().trim();
 
-    // Direct in-scope allowlist verification (CWE-918 CodeQL sanitizer)
-    const approvedDomain = APPROVED_ENTERPRISE_HOSTS.find(
-      (d) => hostToCheck === d || hostToCheck.endsWith('.' + d)
-    );
-
-    if (!approvedDomain || !isApprovedTargetHost(hostToCheck)) {
+    if (!isApprovedTargetHost(hostToCheck)) {
       return {
         success: false,
-        error: `Host '${hostToCheck}' is not in approved PAM scanner list. To inspect, paste HTML in DOM Inspector tab.`,
+        error: `Host '${hostToCheck}' is not in approved PAM scanner list. To inspect, click 'Authorize Domain & Scan' or paste HTML in DOM Inspector.`,
       };
     }
 
@@ -2521,7 +2570,7 @@ async function fetchRealLoginPageHtml(
       const timeoutId = setTimeout(() => controller.abort(), 6000);
 
       // Construct sanitized target URL from validated protocol, approved host, and encoded path
-      const safeRequestUrl = `https://${approvedDomain}${encodeURI(parsed.pathname || '/')}${parsed.search ? '?' + encodeURI(parsed.search.slice(1)) : ''}`;
+      const safeRequestUrl = `https://${hostToCheck}${encodeURI(parsed.pathname || '/')}${parsed.search ? '?' + encodeURI(parsed.search.slice(1)) : ''}`;
 
       const response = await fetch(safeRequestUrl, {
         method: 'GET',
@@ -2572,9 +2621,29 @@ async function fetchRealLoginPageHtml(
   return { success: false, error: 'Too many redirects encountered while visiting target login page.' };
 }
 
+// ----------------------------------------------------
+// ALLOWED SCANNER DOMAINS ENDPOINTS
+// ----------------------------------------------------
+
+app.get('/api/connectors/allowed-domains', createLimiter(60, 60000), (_req, res) => {
+  res.json({ domains: customApprovedDomainsDb });
+});
+
+app.post('/api/connectors/allowed-domains', createLimiter(30, 60000), (req, res) => {
+  const { domain } = req.body;
+  if (!domain || typeof domain !== 'string') {
+    return res.status(400).json({ error: 'Domain string is required.' });
+  }
+  const success = addApprovedTargetDomain(domain);
+  if (!success) {
+    return res.status(400).json({ error: 'Invalid or restricted domain name.' });
+  }
+  res.json({ success: true, domains: customApprovedDomainsDb });
+});
+
 // URL & DOM WebForm Fields Auto-Generator (Visits real URL, inspects live HTML DOM & runs AI synthesis with SSRF defenses)
 app.post('/api/connectors/generate-webform', createLimiter(20, 60000), async (req, res) => {
-  const { targetUrl, rawHtml } = req.body;
+  const { targetUrl, rawHtml, autoAuthorize } = req.body;
 
   if (!targetUrl || typeof targetUrl !== 'string') {
     return res.status(400).json({ error: 'Target URL is required.' });
@@ -2583,6 +2652,21 @@ app.post('/api/connectors/generate-webform', createLimiter(20, 60000), async (re
   let cleanUrl = targetUrl.trim();
   if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
     cleanUrl = `https://${cleanUrl}`;
+  }
+
+  // If autoAuthorize is requested or enabled by default, add domain to approved scanner list
+  if (autoAuthorize !== false) {
+    try {
+      const parsedHost = new URL(cleanUrl).hostname.toLowerCase().trim();
+      addApprovedTargetDomain(parsedHost);
+      const parts = parsedHost.split('.');
+      if (parts.length >= 2) {
+        const baseDomain = parts.slice(-2).join('.');
+        addApprovedTargetDomain(baseDomain);
+      }
+    } catch {
+      // Ignore parse failure; validateUrlForSsrf will handle it
+    }
   }
 
   let htmlToAnalyze = (rawHtml && typeof rawHtml === 'string') ? rawHtml.slice(0, 250000) : '';
