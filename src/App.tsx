@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 import { TroubleshootingDashboard } from './components/TroubleshootingDashboard';
 import { ErrorDetailModal } from './components/ErrorDetailModal';
 import { UpdatesDashboard } from './components/UpdatesDashboard';
@@ -585,6 +586,8 @@ export default function App() {
     }
   };
 
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
   if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-[#0B0E14] text-[#F5F6F8] flex items-center justify-center font-sans">
@@ -612,29 +615,66 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0E14] text-[#F5F6F8] flex flex-col font-sans selection:bg-[#0A84FF] selection:text-[#0B0E14]">
-      {/* Top Navigation */}
-      <Navbar
+    <div className="min-h-screen bg-[#F4F5F9] dark:bg-[#0E1017] text-[#343C6A] dark:text-[#F5F6F8] flex font-sans selection:bg-[#396AFF] selection:text-white transition-colors duration-300">
+      {/* Desktop Sidebar Navigation */}
+      <Sidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        bookmarkCount={bookmarks.length}
-        onOpenBookmarks={() => setIsBookmarksDrawerOpen(true)}
-        onQuickSearchClick={() => {
-          setActiveTab('troubleshooting');
-          const input = document.getElementById('input-error-search');
-          input?.focus();
+        setActiveTab={(tab) => {
+          setActiveTab(tab);
+          setIsMobileSidebarOpen(false);
         }}
-        apiStatus={apiStatus}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        onSwitchDemoUser={handleSwitchDemoUser}
+        advisoryCount={apiStatus.advisoryCount}
         onOpenReadme={() => setIsReadmeModalOpen(true)}
-        currentTheme={themeMode}
-        onThemeChange={handleThemeChange}
+        className="hidden md:flex"
       />
 
-      {/* Main Content Area - 1440px container max */}
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      {/* Mobile Drawer Navigation */}
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          />
+          <Sidebar
+            activeTab={activeTab}
+            setActiveTab={(tab) => {
+              setActiveTab(tab);
+              setIsMobileSidebarOpen(false);
+            }}
+            advisoryCount={apiStatus.advisoryCount}
+            onOpenReadme={() => setIsReadmeModalOpen(true)}
+            className="relative z-10 w-72 h-full shadow-2xl"
+          />
+        </div>
+      )}
+
+      {/* Main Right Column */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Top Header Bar */}
+        <Navbar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          bookmarkCount={bookmarks.length}
+          onOpenBookmarks={() => setIsBookmarksDrawerOpen(true)}
+          onQuickSearchClick={() => {
+            setActiveTab('troubleshooting');
+            const input = document.getElementById('input-error-search');
+            input?.focus();
+          }}
+          apiStatus={apiStatus}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          onSwitchDemoUser={handleSwitchDemoUser}
+          onOpenReadme={() => setIsReadmeModalOpen(true)}
+          currentTheme={themeMode}
+          onThemeChange={handleThemeChange}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+        />
+
+        {/* Main Content Area */}
+        <main className="flex-1 px-4 sm:px-8 py-6 max-w-[1600px] w-full mx-auto space-y-6">
         {activeTab === 'troubleshooting' && (
           <TroubleshootingDashboard
             errors={errors}
@@ -724,20 +764,20 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-[#232833] bg-[#0B0E14] py-8 text-xs text-[#6E7787]">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-[#E6EFF5] dark:border-white/10 bg-white dark:bg-[#12151F] py-6 text-xs text-[#8BA3CB] dark:text-[#A0AEC0] transition-colors">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-[#F5F6F8]">VaultDesk</span>
+            <span className="font-bold text-[#343C6A] dark:text-white">VaultDesk BankDash</span>
             <span>•</span>
-            <span className="text-[#A6AEC0]">Unofficial Community PAM Troubleshooting Assistant & Operations Hub</span>
+            <span>Community PAM Troubleshooting Assistant & Operations Hub</span>
           </div>
 
-          <div className="flex items-center gap-4 text-[#A6AEC0]">
+          <div className="flex items-center gap-4 text-[#8BA3CB] dark:text-[#A0AEC0]">
             <a
               href="https://docs.cyberark.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-[#0A84FF] transition-colors"
+              className="hover:text-[#396AFF] transition-colors"
             >
               CyberArk Docs
             </a>
@@ -745,7 +785,7 @@ export default function App() {
               href="https://community.cyberark.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-[#0A84FF] transition-colors"
+              className="hover:text-[#396AFF] transition-colors"
             >
               Technical Community
             </a>
@@ -753,13 +793,14 @@ export default function App() {
               href="https://marketplace.cyberark.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-[#0A84FF] transition-colors"
+              className="hover:text-[#396AFF] transition-colors"
             >
               Marketplace
             </a>
           </div>
         </div>
       </footer>
+      </div>
 
       {/* Error Detail Modal */}
       <ErrorDetailModal

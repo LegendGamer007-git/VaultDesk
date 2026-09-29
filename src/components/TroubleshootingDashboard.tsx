@@ -35,6 +35,7 @@ import {
 import { ErrorEntry, PamComponent, SeverityLevel, AiDiagnosisResult, UserProfile } from '../types';
 import { TrendingIssuesWidget } from './TrendingIssuesWidget';
 import { ComponentErrorHeatmapWidget } from './ComponentErrorHeatmapWidget';
+import { BankDashOverview } from './BankDashOverview';
 import { COMMUNITY_KB_ARTICLES } from '../data/communityArticles';
 import { COMPONENT_SYMPTOM_PROFILES, SymptomAreaDetail, getSymptomAreasForComponent, getAllSymptomAreas } from '../data/symptomAreas';
 import { getSymptomAreaForError } from '../utils/symptomHelper';
@@ -609,6 +610,13 @@ ${(err.logsToCheck || []).join('\n')}`;
 
   return (
     <div className="space-y-8">
+      {/* BankDash Overview Cards & Activity Charts */}
+      <BankDashOverview
+        errors={errors}
+        onSelectError={onSelectError}
+        onOpenWizard={onOpenWizard || (() => {})}
+      />
+
       {/* Interactive Diagnostic Wizard Callout Banner */}
       {onOpenWizard && (
         <div className="relative overflow-hidden rounded-2xl liquid-glass-elevated p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
