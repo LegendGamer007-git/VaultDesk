@@ -192,7 +192,11 @@ export function sanitizeCustomerSecurityLog(rawLog: string): SanitizedLogResult 
   // 4. Anonymize Hostnames / FQDNs
   const HOST_REGEX = /(?:Host|Target|TargetHost|ComputerName|Server|Station Name|Station)[\s:=]+\[?([a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-\.]+)\]?/gi;
   text = text.replace(HOST_REGEX, (fullMatch, hostname) => {
-    if (hostname.toLowerCase() === 'localhost' || hostname.toLowerCase().includes('cyberark.com') || hostname.toLowerCase().includes('cyberark.cloud')) {
+    const normalizedHost = hostname.toLowerCase().replace(/\.$/, '');
+    const trustedDomains = ['cyberark.com', 'cyberark.cloud'];
+    const isTrustedHost = normalizedHost === 'localhost'
+      || trustedDomains.some((domain) => normalizedHost === domain || normalizedHost.endsWith(`.${domain}`));
+    if (isTrustedHost) {
       return fullMatch;
     }
     if (!hostMap.has(hostname)) {
