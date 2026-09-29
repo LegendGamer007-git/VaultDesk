@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomInt } from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import {
   INITIAL_ERRORS,
@@ -177,6 +177,9 @@ function getAiClient(): GoogleGenAI | null {
 // ----------------------------------------------------
 // API ROUTES
 // ----------------------------------------------------
+
+// Global rate limiter applied to all /api endpoints (CWE-400 / CodeQL js/missing-rate-limiting)
+app.use('/api', rateLimit(120, 60000));
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -810,7 +813,7 @@ function searchCyberArkCommunityPortal(query: string, componentFilter?: string):
     return matchedCurated.map((e) => ({
       ...e,
       isCommunityResult: true,
-      communityArticleId: `00000${Math.floor(1000 + Math.random() * 9000)}`,
+      communityArticleId: `00000${randomInt(1000, 10000)}`,
     }));
   }
 
@@ -891,8 +894,8 @@ function searchCyberArkCommunityPortal(query: string, componentFilter?: string):
     comp = 'Vault';
   }
 
-  const generatedCode = detectedCode || `${comp.toUpperCase()}-COMM-${Math.floor(100 + Math.random() * 900)}E`;
-  const articleId = `00000${Math.floor(2000 + Math.random() * 7000)}`;
+  const generatedCode = detectedCode || `${comp.toUpperCase()}-COMM-${randomInt(100, 1000)}E`;
+  const articleId = `00000${randomInt(2000, 9000)}`;
 
   const formatTitle = (componentName: string) => {
     const trimmed = query.trim();
@@ -1116,7 +1119,7 @@ app.post('/api/logs/sanitized', (req, res) => {
   }
 
   const newEntry: SavedLogEntry = {
-    id: `log-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+    id: `log-${Date.now()}-${randomInt(100, 1000)}`,
     timestamp: new Date().toISOString(),
     component: component || 'General',
     originalFileName: originalFileName || 'pasted-security-log.log',
@@ -1578,7 +1581,7 @@ app.post('/api/analyze-log', rateLimit(30, 60000), requirePermission('logs:analy
 
   if (saveToServer) {
     const savedEntry: SavedLogEntry = {
-      id: `log-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      id: `log-${Date.now()}-${randomInt(100, 1000)}`,
       timestamp: new Date().toISOString(),
       component: result.detectedComponent,
       originalFileName: fileName || 'security_log.log',
@@ -1619,7 +1622,7 @@ app.post('/api/logs/save', (req, res) => {
   }
 
   const savedEntry: SavedLogEntry = {
-    id: `log-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+    id: `log-${Date.now()}-${randomInt(100, 1000)}`,
     timestamp: new Date().toISOString(),
     component: (component as PamComponent) || 'Privilege Cloud',
     originalFileName: originalFileName || 'uploaded_security_log.log',
@@ -2184,7 +2187,7 @@ app.post('/api/kb/:id/attachments', (req, res) => {
   }
 
   const newAttachment = {
-    id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    id: `att-${Date.now()}-${randomInt(100, 1000)}`,
     name,
     size: Number(size) || 0,
     type: type || 'application/octet-stream',

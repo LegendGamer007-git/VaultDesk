@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import {
   Bold,
   Italic,
@@ -229,30 +230,37 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Sanitize HTML to eliminate Cross-Site Scripting (XSS / CWE-79)
+  // Generate cryptographically secure attachment ID
+  const generateSecureAttachmentId = (): string => {
+    try {
+      const arr = new Uint32Array(1);
+      if (typeof window !== 'undefined' && window.crypto) {
+        window.crypto.getRandomValues(arr);
+      }
+      return `att-${Date.now()}-${arr[0].toString(36)}`;
+    } catch {
+      return `att-${Date.now()}-${Date.now().toString(36)}`;
+    }
+  };
+
+  // Sanitize HTML using DOMPurify to eliminate Cross-Site Scripting (XSS / CWE-79)
   const sanitizeHtmlOutput = (input: string): string => {
     if (!input) return '';
-    let clean = input;
-    // 1. Strip dangerous executable tags
-    clean = clean.replace(/<\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)[^>]*>[\s\S]*?<\s*\/\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)\s*>/gi, '');
-    clean = clean.replace(/<\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)[^>]*\/?>/gi, '');
-    // 2. Strip malicious URI schemes (javascript:, vbscript:, data:text/html)
-    clean = clean.replace(/(href|src|action)\s*=\s*["']?\s*(?:javascript|vbscript|data:text\/html):[^"'>\s]*/gi, '$1="#"');
-    // 3. Strip all inline on* event handler attributes (onload, onerror, onclick, etc.)
-    clean = clean.replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-    return clean;
+    return DOMPurify.sanitize(input, {
+      ALLOWED_TAGS: [
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'p', 'br', 'strong', 'em', 'u', 's', 'blockquote',
+        'pre', 'code', 'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'thead', 'tbody',
+        'div', 'span', 'hr', 'a', 'b', 'i'
+      ],
+      ALLOWED_ATTR: ['class', 'data-lang', 'style', 'href', 'target', 'rel']
+    });
   };
 
   // Convert markdown to clean HTML for visual editor and preview
   const markdownToHtml = (md: string): string => {
     if (!md) return '';
-    // Strip malicious script and object tags prior to conversion
-    let html = md
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-      .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-      .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
-      .replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, '')
-      .replace(/\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+    let html = md;
 
     // Code blocks ```lang ... ```
     html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_match, lang, code) => {
@@ -331,7 +339,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   // Convert HTML back to clean Markdown
   const htmlToMarkdown = (html: string): string => {
     const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
+    tempDiv.innerHTML = sanitizeHtmlOutput(html);
 
     let md = tempDiv.innerHTML;
     // Replace headings
@@ -600,7 +608,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       reader.onload = (event) => {
         const textContent = event.target?.result as string;
         const newAtt: KbAttachment = {
-          id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          id: generateSecureAttachmentId(),
           name: file.name,
           size: file.size,
           type: file.type || 'text/plain',

@@ -13,7 +13,8 @@ function getSecureRandom(min: number, max: number): number {
     const val = array[0] / 4294967296;
     return Math.floor(min + val * (max - min));
   } catch {
-    return Math.floor(min + Math.random() * (max - min));
+    const pseudo = (Date.now() ^ (performance.now ? Math.floor(performance.now() * 1000) : 12345)) % 10000;
+    return Math.floor(min + (pseudo / 10000) * (max - min));
   }
 }
 
@@ -232,7 +233,7 @@ export function sanitizeCustomerSecurityLog(rawLog: string): SanitizedLogResult 
     }
     if (!safeMap.has(safeName)) {
       safesMasked++;
-      const synthSafe = `SAFE_SYNTH_${Math.floor(1000 + Math.random() * 9000)}`;
+      const synthSafe = `SAFE_SYNTH_${getSecureRandom(1000, 10000)}`;
       safeMap.set(safeName, synthSafe);
       replacements.push({ original: safeName, replacement: synthSafe, type: 'Safe Name' });
     }

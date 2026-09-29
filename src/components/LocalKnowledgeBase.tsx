@@ -80,6 +80,18 @@ const COMPONENTS: (PamComponent | 'All')[] = [
   'General',
 ];
 
+const generateSecureId = (prefix: string): string => {
+  try {
+    const array = new Uint32Array(1);
+    if (typeof window !== 'undefined' && window.crypto) {
+      window.crypto.getRandomValues(array);
+    }
+    return `${prefix}-${Date.now()}-${array[0].toString(36)}`;
+  } catch {
+    return `${prefix}-${Date.now()}-${Date.now().toString(36)}`;
+  }
+};
+
 const SAMPLE_SOP_TEMPLATE = `## 1. Objective & Scope
 Briefly describe the purpose of this procedure and what environments (Prod, DR, Staging) it applies to.
 
@@ -327,7 +339,7 @@ export const LocalKnowledgeBase: React.FC<LocalKnowledgeBaseProps> = ({
 
     if (isCreating) {
       const newArticle: LocalKbArticle = {
-        id: `kb-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        id: generateSecureId('kb'),
         title: editorTitle.trim(),
         slug,
         space: editorSpace,
@@ -415,7 +427,7 @@ export const LocalKnowledgeBase: React.FC<LocalKnowledgeBaseProps> = ({
 
     if (isCreating) {
       const newArticle: LocalKbArticle = {
-        id: `kb-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        id: generateSecureId('kb'),
         title: cleanTitle,
         slug,
         space: data.space || editorSpace || 'Runbooks & SOPs',
@@ -516,7 +528,7 @@ export const LocalKnowledgeBase: React.FC<LocalKnowledgeBaseProps> = ({
     const now = new Date().toISOString();
     const duplicated: LocalKbArticle = {
       ...article,
-      id: `kb-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: generateSecureId('kb'),
       title: `${article.title} (Copy)`,
       slug: `${article.slug}-copy`,
       status: 'draft',
@@ -603,7 +615,7 @@ export const LocalKnowledgeBase: React.FC<LocalKnowledgeBaseProps> = ({
       reader.onload = (event) => {
         const fileContent = event.target?.result as string;
         const newAtt: KbAttachment = {
-          id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          id: generateSecureId('att'),
           name: file.name,
           size: file.size,
           type: file.type || 'text/plain',
