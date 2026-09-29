@@ -168,6 +168,14 @@ Set-Location "C:\\Program Files (x86)\\CyberArk\\PSM\\Hardening"
   },
 ];
 
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   initialTitle = '',
   initialSpace = 'Runbooks & SOPs',
@@ -732,12 +740,13 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       return;
     }
 
+    const safePrintTitle = escapeHtml(title || 'Runbook');
     const printHtml = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${title || 'Runbook'} - VaultDesk PDF Export</title>
+  <title>${safePrintTitle} - VaultDesk PDF Export</title>
   <style>
     @page {
       margin: 1.8cm;
