@@ -2282,6 +2282,51 @@ app.delete('/api/connectors/:id', createLimiter(30, 60000), (req, res) => {
   res.json({ success: true, remaining: psmConnectorsDb.length });
 });
 
+// Verified Enterprise Portal & Cloud Domains Allowlist (CWE-918 / CodeQL js/request-forgery prevention)
+const VERIFIED_ENTERPRISE_DOMAINS = new Set([
+  'aws.amazon.com',
+  'signin.aws.amazon.com',
+  'console.aws.amazon.com',
+  'portal.azure.com',
+  'login.microsoftonline.com',
+  'service-now.com',
+  'okta.com',
+  'oktapreview.com',
+  'atlassian.net',
+  'atlassian.com',
+  'cyberark.com',
+  'cyberark.cloud',
+  'privilegecloud.cyberark.cloud',
+  'github.com',
+  'gitlab.com',
+  'salesforce.com',
+  'login.salesforce.com',
+  'google.com',
+  'accounts.google.com',
+  'cloudflare.com',
+  'vmware.com',
+  'broadcom.com',
+  'oracle.com',
+  'login.oracle.com',
+  'auth0.com',
+  'zendesk.com',
+  'zoom.us',
+  'slack.com',
+  'workday.com',
+]);
+
+function isAllowedTargetDomain(host: string): boolean {
+  if (VERIFIED_ENTERPRISE_DOMAINS.has(host)) {
+    return true;
+  }
+  for (const domain of VERIFIED_ENTERPRISE_DOMAINS) {
+    if (host.endsWith('.' + domain)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Helper: SSRF-Protected Live Login Page Fetcher
 async function fetchRealLoginPageHtml(targetUrlStr: string): Promise<{
   ok: boolean;
@@ -2311,37 +2356,12 @@ async function fetchRealLoginPageHtml(targetUrlStr: string): Promise<{
 
     const host = currentUrl.hostname.toLowerCase();
 
-    // 3. Strict hostname validations (no IP addresses, no loopbacks, no cloud metadata)
-    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
-    if (ipv4Regex.test(host)) {
-      return { ok: false, error: 'Direct numeric IP addresses are blocked (SSRF Protection). Please provide a valid domain name.' };
-    }
-
-    if (host.startsWith('[') || host.includes(':')) {
-      return { ok: false, error: 'Direct IPv6 addresses are blocked.' };
-    }
-
-    if (
-      host === 'localhost' ||
-      host.endsWith('.localhost') ||
-      host.endsWith('.local') ||
-      host.endsWith('.internal') ||
-      host.endsWith('.corp') ||
-      host.endsWith('.lan') ||
-      host.endsWith('.home') ||
-      host === '169.254.169.254' ||
-      host === 'metadata.google.internal' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
-      host === '::1'
-    ) {
-      return { ok: false, error: 'Access to loopback, internal, or cloud metadata domains is blocked (SSRF Protection).' };
-    }
-
-    // Hostname must be a valid FQDN
-    const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
-    if (!domainRegex.test(host)) {
-      return { ok: false, error: 'Hostname must be a valid fully qualified domain name (e.g. app.example.com).' };
+    // 3. Domain Allowlist Enforcement (Strict SSRF Protection)
+    if (!isAllowedTargetDomain(host)) {
+      return {
+        ok: false,
+        error: `Domain '${host}' is not in the public verified domains allowlist. For custom or internal intranets, paste the login page HTML snippet directly below to inspect real DOM elements.`,
+      };
     }
 
     // 4. Perform bounded fetch with AbortController
