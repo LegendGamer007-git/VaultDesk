@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import dns from 'dns';
 import { randomUUID, randomInt } from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
@@ -2290,7 +2291,215 @@ app.delete('/api/connectors/:id', createLimiter(30, 60000), (req, res) => {
   res.json({ success: true, remaining: psmConnectorsDb.length });
 });
 
-// URL & DOM WebForm Fields Auto-Generator (Analyzes real HTML DOM & runs AI synthesis without server-side SSRF exposure)
+// ----------------------------------------------------
+// SSRF DEFENSE & LIVE LOGIN PAGE FETCHER (CWE-918 / js/request-forgery)
+// ----------------------------------------------------
+
+function isPrivateIPv4(ip: string): boolean {
+  const parts = ip.split('.').map((p) => parseInt(p, 10));
+  if (parts.length !== 4 || parts.some(isNaN) || parts.some((p) => p < 0 || p > 255)) {
+    return true; // Treat invalid IPv4 as unsafe
+  }
+
+  const [a, b, c] = parts;
+
+  // 0.0.0.0/8 (Current network)
+  if (a === 0) return true;
+  // 10.0.0.0/8 (Private network RFC 1918)
+  if (a === 10) return true;
+  // 100.64.0.0/10 (Shared Address Space / CGNAT)
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  // 127.0.0.0/8 (Loopback)
+  if (a === 127) return true;
+  // 169.254.0.0/16 (Link Local / Cloud Instance Metadata RFC 3927)
+  if (a === 169 && b === 254) return true;
+  // 172.16.0.0/12 (Private network RFC 1918)
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  // 192.0.0.0/24 (IETF Protocol Assignments)
+  if (a === 192 && b === 0 && c === 0) return true;
+  // 192.0.2.0/24 (TEST-NET-1)
+  if (a === 192 && b === 0 && c === 2) return true;
+  // 192.88.99.0/24 (6to4 Relay Anycast)
+  if (a === 192 && b === 88 && c === 99) return true;
+  // 192.168.0.0/16 (Private network RFC 1918)
+  if (a === 192 && b === 168) return true;
+  // 198.18.0.0/15 (Network benchmark tests)
+  if (a === 198 && (b === 18 || b === 19)) return true;
+  // 198.51.100.0/24 (TEST-NET-2)
+  if (a === 198 && b === 51 && c === 100) return true;
+  // 203.0.113.0/24 (TEST-NET-3)
+  if (a === 203 && b === 0 && c === 113) return true;
+  // 224.0.0.0/4 (Multicast)
+  if (a >= 224 && a <= 239) return true;
+  // 240.0.0.0/4 (Reserved / Future Use / 255.255.255.255 Broadcast)
+  if (a >= 240) return true;
+
+  return false;
+}
+
+function isPrivateIPv6(ip: string): boolean {
+  const cleanIp = ip.toLowerCase();
+  // Loopback (::1) or Unspecified (::)
+  if (cleanIp === '::1' || cleanIp === '::' || cleanIp.startsWith('::ffff:127.')) {
+    return true;
+  }
+  // Link-local unicast (fe80::/10)
+  if (/^fe[89ab]/i.test(cleanIp)) return true;
+  // Unique local address (fc00::/7)
+  if (/^f[cd]/i.test(cleanIp)) return true;
+  // IPv4-mapped IPv6
+  if (cleanIp.startsWith('::ffff:')) {
+    const mappedIpv4 = cleanIp.replace('::ffff:', '');
+    if (mappedIpv4.includes('.')) {
+      return isPrivateIPv4(mappedIpv4);
+    }
+  }
+  return false;
+}
+
+async function validateUrlForSsrf(targetUrl: string): Promise<{ valid: boolean; reason?: string; url?: URL }> {
+  try {
+    const parsed = new URL(targetUrl);
+
+    // Protocol check
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { valid: false, reason: `Invalid protocol '${parsed.protocol}'. Only HTTP/HTTPS URLs are permitted.` };
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+    if (!hostname) {
+      return { valid: false, reason: 'Hostname is missing from the target URL.' };
+    }
+
+    // Block obvious local/internal hostnames
+    const blockedHosts = [
+      'localhost',
+      '127.0.0.1',
+      '0.0.0.0',
+      '::1',
+      'metadata.google.internal',
+      '169.254.169.254',
+      'instance-data',
+    ];
+    if (
+      blockedHosts.includes(hostname) ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.internal') ||
+      hostname.endsWith('.local')
+    ) {
+      return { valid: false, reason: `Target host '${hostname}' is restricted by PAM SSRF security policy.` };
+    }
+
+    // Direct IP address check
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
+      if (isPrivateIPv4(hostname)) {
+        return { valid: false, reason: `Private IPv4 address '${hostname}' is blocked by security policy (CWE-918).` };
+      }
+    }
+
+    // Resolve DNS to verify the target IP is public
+    try {
+      const addresses = await dns.promises.lookup(hostname, { all: true });
+      if (!addresses || addresses.length === 0) {
+        return { valid: false, reason: `Domain '${hostname}' could not be resolved.` };
+      }
+
+      for (const addr of addresses) {
+        if (addr.family === 4) {
+          if (isPrivateIPv4(addr.address)) {
+            return {
+              valid: false,
+              reason: `DNS for '${hostname}' resolved to internal IP '${addr.address}', blocked by SSRF policy.`,
+            };
+          }
+        } else if (addr.family === 6) {
+          if (isPrivateIPv6(addr.address)) {
+            return {
+              valid: false,
+              reason: `DNS for '${hostname}' resolved to internal IPv6 '${addr.address}', blocked by SSRF policy.`,
+            };
+          }
+        }
+      }
+    } catch (dnsErr: any) {
+      return { valid: false, reason: `DNS resolution failed for '${hostname}': ${dnsErr.message || 'Domain not found'}` };
+    }
+
+    return { valid: true, url: parsed };
+  } catch (err: any) {
+    return { valid: false, reason: `Malformed URL format: ${err.message}` };
+  }
+}
+
+async function fetchRealLoginPageHtml(
+  targetUrl: string,
+  maxRedirects = 3
+): Promise<{ success: boolean; html?: string; statusCode?: number; error?: string; finalUrl?: string }> {
+  let currentUrl = targetUrl;
+
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const validation = await validateUrlForSsrf(currentUrl);
+    if (!validation.valid || !validation.url) {
+      return {
+        success: false,
+        error: validation.reason || 'URL failed SSRF validation policy',
+      };
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const response = await fetch(validation.url.href, {
+        method: 'GET',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 VaultDesk-PAM-Scanner/1.0',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+        },
+        redirect: 'manual', // Manual redirect control to validate each hop against SSRF policies
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // Handle redirects securely
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get('location');
+        if (!location) {
+          return { success: false, statusCode: response.status, error: 'Redirect without Location header.' };
+        }
+        // Resolve redirect URL against current base URL
+        const nextUrl = new URL(location, currentUrl).href;
+        currentUrl = nextUrl;
+        continue;
+      }
+
+      // Read body with 250KB limit to prevent resource exhaustion (CWE-400)
+      const rawText = await response.text();
+      const htmlSlice = rawText.slice(0, 250000);
+
+      return {
+        success: true,
+        html: htmlSlice,
+        statusCode: response.status,
+        finalUrl: currentUrl,
+      };
+    } catch (fetchErr: any) {
+      if (fetchErr.name === 'AbortError') {
+        return { success: false, error: 'Connection timed out (6s limit) while contacting target login server.' };
+      }
+      return { success: false, error: `Network fetch failed: ${fetchErr.message || 'Unknown network error'}` };
+    }
+  }
+
+  return { success: false, error: 'Too many redirects encountered while visiting target login page.' };
+}
+
+// URL & DOM WebForm Fields Auto-Generator (Visits real URL, inspects live HTML DOM & runs AI synthesis with SSRF defenses)
 app.post('/api/connectors/generate-webform', createLimiter(20, 60000), async (req, res) => {
   const { targetUrl, rawHtml } = req.body;
 
@@ -2298,13 +2507,38 @@ app.post('/api/connectors/generate-webform', createLimiter(20, 60000), async (re
     return res.status(400).json({ error: 'Target URL is required.' });
   }
 
+  let cleanUrl = targetUrl.trim();
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+    cleanUrl = `https://${cleanUrl}`;
+  }
+
   let htmlToAnalyze = (rawHtml && typeof rawHtml === 'string') ? rawHtml.slice(0, 250000) : '';
+  let liveFetchStatus = '';
+  let statusCode = 200;
   const warnings: string[] = [];
 
+  // If raw HTML was not explicitly supplied by user, perform real live backend visit
+  if (!htmlToAnalyze) {
+    const fetchResult = await fetchRealLoginPageHtml(cleanUrl);
+    if (fetchResult.success && fetchResult.html) {
+      htmlToAnalyze = fetchResult.html;
+      statusCode = fetchResult.statusCode || 200;
+      liveFetchStatus = `Live URL verified (HTTP ${statusCode}) - Real login DOM inspected`;
+      if (fetchResult.finalUrl && fetchResult.finalUrl !== cleanUrl) {
+        cleanUrl = fetchResult.finalUrl;
+      }
+    } else {
+      warnings.push(fetchResult.error || 'Live fetch could not reach server.');
+      liveFetchStatus = `Live fetch unreached: ${fetchResult.error || 'Connection failed'}. (DOM synthesized from URL structure)`;
+    }
+  } else {
+    liveFetchStatus = 'User-provided HTML DOM inspected';
+  }
+
   // Parse the actual HTML DOM to extract real inputs, buttons, and validation targets
-  const analysisResult = analyzeHtmlForWebForms(htmlToAnalyze, targetUrl);
-  analysisResult.liveFetchStatus = htmlToAnalyze ? 'Real HTML DOM inspected' : 'Analyzed via application URL template';
-  analysisResult.statusCode = 200;
+  const analysisResult = analyzeHtmlForWebForms(htmlToAnalyze, cleanUrl);
+  analysisResult.liveFetchStatus = liveFetchStatus;
+  analysisResult.statusCode = statusCode;
 
   if (warnings.length > 0) {
     analysisResult.securityWarnings = [...(analysisResult.securityWarnings || []), ...warnings];
@@ -2317,11 +2551,11 @@ app.post('/api/connectors/generate-webform', createLimiter(20, 60000), async (re
       const prompt = `You are a CyberArk Privileged Access Management (PAM) Engineer.
 Analyze this web application login page context to construct the exact CyberArk PSM WebFormFields sequence for PSM-WebApp Dispatcher.
 
-Target URL: ${targetUrl}
+Target URL: ${cleanUrl}
 Page Title: ${analysisResult.pageTitle || 'Web Application'}
 
 HTML DOM SNIPPET:
-${htmlToAnalyze.slice(0, 4500) || '(Inferring standard enterprise login elements for ' + targetUrl + ')'}
+${htmlToAnalyze.slice(0, 4500) || '(Inferring standard enterprise login elements for ' + cleanUrl + ')'}
 
 Instructions:
 1. Identify the REAL username/email input element (prefer 'id' or 'name' attribute).
