@@ -1,6 +1,7 @@
 import { PamComponent, SeverityLevel, ErrorEntry } from '../types';
 import { COMMUNITY_KB_ARTICLES } from '../data/communityArticles';
 import { INITIAL_ERRORS } from '../data/pamData';
+import { randomInt } from 'crypto';
 
 export interface ParsedLogLine {
   lineNumber: number;
@@ -181,8 +182,8 @@ export function sanitizeCustomerSecurityLog(rawLog: string): SanitizedLogResult 
     if (!userMap.has(username)) {
       usersMasked++;
       const synthUser = username.includes('\\')
-        ? `CORP_ANON\\user_synth_${Math.floor(100 + Math.random() * 900)}`
-        : `user_synth_${Math.floor(100 + Math.random() * 900)}`;
+        ? `CORP_ANON\\user_synth_${randomInt(100, 1000)}`
+        : `user_synth_${randomInt(100, 1000)}`;
       userMap.set(username, synthUser);
       replacements.push({ original: username, replacement: synthUser, type: 'User Account' });
     }
@@ -201,7 +202,7 @@ export function sanitizeCustomerSecurityLog(rawLog: string): SanitizedLogResult 
     }
     if (!hostMap.has(hostname)) {
       hostsMasked++;
-      const synthHost = `host-edge-${Math.floor(100 + Math.random() * 900)}.synth.local`;
+      const synthHost = `host-edge-${randomInt(100, 1000)}.synth.local`;
       hostMap.set(hostname, synthHost);
       replacements.push({ original: hostname, replacement: synthHost, type: 'Target Host / FQDN' });
     }
