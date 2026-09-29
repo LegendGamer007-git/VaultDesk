@@ -1,0 +1,6 @@
+{
+  "name": "VaultDesk",
+  "description": "Community PAM troubleshooting assistant, curated error knowledge base, security advisory tracker, and release updates feed.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
