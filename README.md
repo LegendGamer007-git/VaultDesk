@@ -150,8 +150,8 @@ git --version# Should print git version 2.30+
 
 #### Step 4: Clone the Repository
 ```bash
-git clone https://github.com/your-username/vaultdesk-pam-portal.git
-cd vaultdesk-pam-portal
+git clone https://github.com/LegendGamer007-git/VaultDesk.git
+cd VaultDesk
 ```
 
 #### Step 5: Configure Environment Variables
@@ -228,8 +228,8 @@ git --version# Expected: git version 2.x+
 
 #### Step 5: Clone the Repository
 ```powershell
-git clone https://github.com/your-username/vaultdesk-pam-portal.git
-cd vaultdesk-pam-portal
+git clone https://github.com/LegendGamer007-git/VaultDesk.git
+cd VaultDesk
 ```
 
 #### Step 6: Configure Environment Variables
@@ -302,8 +302,8 @@ git --version# Expected: git version 2.x+
 
 #### Step 6: Clone the Repository
 ```bash
-git clone https://github.com/your-username/vaultdesk-pam-portal.git
-cd vaultdesk-pam-portal
+git clone https://github.com/LegendGamer007-git/VaultDesk.git
+cd VaultDesk
 ```
 
 #### Step 7: Configure Environment Variables
