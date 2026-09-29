@@ -39,6 +39,8 @@ import {
 const app = express();
 const PORT = 3000;
 
+const spaFallbackRateLimiter = rateLimit(100, 15 * 60 * 1000);
+
 app.use(express.json({ limit: '15mb' }));
 
 // Enhanced HTTP Security Headers (CWE-693)
@@ -2212,7 +2214,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', spaFallbackRateLimiter, (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
