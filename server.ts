@@ -44,6 +44,9 @@ import {
 const app = express();
 const PORT = 3000;
 
+// Trust proxy for reverse proxy environments (e.g. Cloud Run, AI Studio preview)
+app.set('trust proxy', 1);
+
 // Standard Express Rate Limiting middleware (CWE-400 / CodeQL js/missing-rate-limiting)
 const createLimiter = (maxRequests = 40, windowMs = 60000) =>
   rateLimit({
@@ -51,6 +54,11 @@ const createLimiter = (maxRequests = 40, windowMs = 60000) =>
     limit: maxRequests,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: {
+      xForwardedForHeader: false,
+      forwardedHeader: false,
+      default: false,
+    },
     message: {
       error: 'Too many requests. Please wait a minute before making further requests.',
     },
