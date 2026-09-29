@@ -233,9 +233,13 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const sanitizeHtmlOutput = (input: string): string => {
     if (!input) return '';
     let clean = input;
-    // 1. Strip dangerous executable tags
-    clean = clean.replace(/<\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)[^>]*>[\s\S]*?<\s*\/\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)\s*>/gi, '');
-    clean = clean.replace(/<\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)[^>]*\/?>/gi, '');
+    // 1. Strip dangerous executable tags (repeat until stable to avoid reintroduced matches)
+    let previous: string;
+    do {
+      previous = clean;
+      clean = clean.replace(/<\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)[^>]*>[\s\S]*?<\s*\/\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)\s*>/gi, '');
+      clean = clean.replace(/<\s*(?:script|iframe|object|embed|form|base|link|meta|style|applet)[^>]*\/?>/gi, '');
+    } while (clean !== previous);
     // 2. Strip malicious URI schemes (javascript:, vbscript:, data:text/html)
     clean = clean.replace(/(href|src|action)\s*=\s*["']?\s*(?:javascript|vbscript|data:text\/html):[^"'>\s]*/gi, '$1="#"');
     // 3. Strip all inline on* event handler attributes (onload, onerror, onclick, etc.)
