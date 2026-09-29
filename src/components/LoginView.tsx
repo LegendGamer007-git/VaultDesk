@@ -97,7 +97,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenRead
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: userEmail, password: 'Password123!', authMethod: 'local' }),
+        body: JSON.stringify({ email: userEmail, authMethod: 'local' }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -303,7 +303,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenRead
                     Password
                   </label>
                   <span className="text-[11px] text-[#6E7787]">
-                    Default: <code className="font-mono text-[#64D2FF]">Password123!</code>
+                    Managed Auth
                   </span>
                 </div>
                 <div className="relative">

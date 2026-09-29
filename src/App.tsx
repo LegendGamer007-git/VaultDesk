@@ -517,7 +517,7 @@ export default function App() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: 'Password123!', authMethod: 'local' }),
+        body: JSON.stringify({ email, authMethod: 'local' }),
       });
       if (res.ok) {
         const data = await res.json();

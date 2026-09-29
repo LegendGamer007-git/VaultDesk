@@ -89,7 +89,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   // Add Local User Form State
   const [addName, setAddName] = useState('');
   const [addEmail, setAddEmail] = useState('');
-  const [addPassword, setAddPassword] = useState('Password123!');
+  const [addPassword, setAddPassword] = useState('');
   const [addRole, setAddRole] = useState<UserRole>('reader');
   const [addCustomRoleId, setAddCustomRoleId] = useState('');
   const [addDepartment, setAddDepartment] = useState('SecOps Triage');

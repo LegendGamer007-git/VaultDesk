@@ -15,6 +15,8 @@ import {
   Cloud,
   Server,
   Clock,
+  Search,
+  ShieldCheck,
 } from 'lucide-react';
 import { UpdateRelease, SecurityAdvisory } from '../types';
 
@@ -36,6 +38,8 @@ export const UpdatesDashboard: React.FC<UpdatesDashboardProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<'releases' | 'advisories' | 'impact'>('releases');
   const [selectedProductFilter, setSelectedProductFilter] = useState<string>('All');
   const [selectedCveSeverity, setSelectedCveSeverity] = useState<string>('All');
+  const [advisorySearch, setAdvisorySearch] = useState<string>('');
+  const [onlyLast30Days, setOnlyLast30Days] = useState<boolean>(false);
 
   // Upgrade Impact Calculator state (defaulting to 15.2.0 latest LTS)
   const [sourceVersion, setSourceVersion] = useState<string>('14.0 LTS');
@@ -126,8 +130,23 @@ export const UpdatesDashboard: React.FC<UpdatesDashboardProps> = ({
   });
 
   const filteredAdvisories = advisories.filter((a) => {
-    if (selectedCveSeverity === 'All') return true;
-    return a.severity.toLowerCase() === selectedCveSeverity.toLowerCase();
+    if (selectedCveSeverity !== 'All' && a.severity.toLowerCase() !== selectedCveSeverity.toLowerCase()) {
+      return false;
+    }
+    if (onlyLast30Days && !a.isRecent30Days) {
+      return false;
+    }
+    if (advisorySearch.trim()) {
+      const q = advisorySearch.toLowerCase().trim();
+      const matchesBulletin = a.bulletinId?.toLowerCase().includes(q);
+      const matchesCve = a.cveId.toLowerCase().includes(q);
+      const matchesTitle = a.title.toLowerCase().includes(q);
+      const matchesProd = a.product.toLowerCase().includes(q);
+      if (!matchesBulletin && !matchesCve && !matchesTitle && !matchesProd) {
+        return false;
+      }
+    }
+    return true;
   });
 
   const getCvssColor = (score: number) => {
@@ -730,17 +749,71 @@ export const UpdatesDashboard: React.FC<UpdatesDashboardProps> = ({
         </div>
       )}
 
-      {/* VIEW 2: SECURITY ADVISORIES / CVE */}
+      {/* VIEW 2: CYBERARK SECURITY ADVISORIES / CVE BULLETINS */}
       {activeSubTab === 'advisories' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-[#6E7787]">Severity Filter:</span>
+          {/* CyberArk Official Trust Center Banner */}
+          <div className="p-4 rounded-[12px] bg-[#101E26] border border-[#64D2FF]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-[#F5F6F8]">
+              <ShieldCheck className="w-5 h-5 text-[#64D2FF] shrink-0" />
+              <div>
+                <span className="font-bold text-[#64D2FF]">Official CyberArk Security Bulletins</span>
+                <p className="text-[#A6AEC0] text-[11px]">
+                  Validated against CyberArk Technical Community and Trust Center advisories (including latest 30-day bulletins CA26-47, CA26-46, CA26-45, CA26-44).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href="https://www.cyberark.com/trust-center/security-advisories/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-[8px] bg-[#162736] hover:bg-[#1C3347] border border-[#64D2FF]/40 text-[#64D2FF] font-semibold flex items-center gap-1.5 transition-colors"
+                title="Open CyberArk Trust Center"
+              >
+                <span>CyberArk Trust Center</span>
+                <ExternalLink className="w-3 h-3 text-[#64D2FF]" />
+              </a>
+
+              <a
+                href="https://community.cyberark.com/s/global-search/%40uri#q=Security%20Bulletin"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-[8px] bg-[#1A1E27] hover:bg-[#232833] border border-[#2E3440] text-[#A6AEC0] hover:text-[#F5F6F8] font-semibold flex items-center gap-1.5 transition-colors"
+                title="Search all CyberArk Security Bulletins"
+              >
+                <span>Community Bulletins</span>
+                <ExternalLink className="w-3 h-3 text-[#6E7787]" />
+              </a>
+            </div>
+          </div>
+
+          {/* Filter Bar with Search and 30-Day Toggle */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-[#6E7787]">Filter:</span>
+              
+              <button
+                onClick={() => setOnlyLast30Days(!onlyLast30Days)}
+                className={`px-3 py-1 rounded-[8px] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  onlyLast30Days
+                    ? 'bg-[#FF9F0A] text-black shadow-sm'
+                    : 'bg-[#1A1E27] text-[#FF9F0A] hover:bg-[#2A1F0C] border border-[#FF9F0A]/40'
+                }`}
+              >
+                <Clock className="w-3 h-3" />
+                <span>Last 30 Days Only</span>
+                {onlyLast30Days && <CheckCircle2 className="w-3 h-3" />}
+              </button>
+
+              <div className="h-4 w-px bg-[#2E3440] mx-1" />
+
               {['All', 'Critical', 'High', 'Medium'].map((sev) => (
                 <button
                   key={sev}
                   onClick={() => setSelectedCveSeverity(sev)}
-                  className={`px-3 py-1 rounded-[8px] text-xs font-medium transition-colors ${
+                  className={`px-3 py-1 rounded-[8px] text-xs font-medium transition-colors cursor-pointer ${
                     selectedCveSeverity === sev
                       ? 'bg-[#0A84FF] text-white font-semibold'
                       : 'bg-[#1A1E27] text-[#A6AEC0] hover:text-[#F5F6F8] border border-[#2E3440]'
@@ -750,96 +823,172 @@ export const UpdatesDashboard: React.FC<UpdatesDashboardProps> = ({
                 </button>
               ))}
             </div>
-            <span className="text-xs text-[#6E7787]">Security Bulletins</span>
+
+            {/* Bulletin / CVE Search Bar */}
+            <div className="relative w-full md:w-64">
+              <Search className="w-3.5 h-3.5 text-[#6E7787] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={advisorySearch}
+                onChange={(e) => setAdvisorySearch(e.target.value)}
+                placeholder="Search CA26-47, CVE, or PVWA..."
+                className="w-full pl-8 pr-3 py-1.5 bg-[#12151C] border border-[#2E3440] rounded-[8px] text-xs text-[#F5F6F8] placeholder-[#6E7787] focus:outline-none focus:border-[#0A84FF]"
+              />
+              {advisorySearch && (
+                <button
+                  onClick={() => setAdvisorySearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#6E7787] hover:text-[#F5F6F8]"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           </div>
 
+          {/* Advisories List */}
           <div className="space-y-4">
-            {filteredAdvisories.map((adv) => (
-              <div
-                key={adv.id}
-                id={`advisory-${adv.cveId.toLowerCase()}`}
-                className="p-6 rounded-[14px] bg-[#12151C] border border-[#232833] space-y-4 shadow-[0_1px_2px_rgba(0,0,0,0.4)]"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#232833] pb-3">
-                  <div className="space-y-1">
+            {filteredAdvisories.length === 0 ? (
+              <div className="p-12 text-center rounded-[14px] bg-[#12151C] border border-[#232833] space-y-2">
+                <ShieldAlert className="w-8 h-8 text-[#6E7787] mx-auto" />
+                <p className="text-sm font-semibold text-[#F5F6F8]">No security advisories match your filters</p>
+                <p className="text-xs text-[#6E7787]">Try resetting the severity or search term to see all CyberArk bulletins.</p>
+                <button
+                  onClick={() => {
+                    setSelectedCveSeverity('All');
+                    setOnlyLast30Days(false);
+                    setAdvisorySearch('');
+                  }}
+                  className="mt-2 px-3 py-1.5 rounded-[8px] bg-[#1A1E27] hover:bg-[#232833] text-[#0A84FF] text-xs font-semibold border border-[#2E3440]"
+                >
+                  Reset All Filters
+                </button>
+              </div>
+            ) : (
+              filteredAdvisories.map((adv) => (
+                <div
+                  key={adv.id}
+                  id={`advisory-${adv.bulletinId.toLowerCase()}`}
+                  className="p-6 rounded-[14px] bg-[#12151C] border border-[#232833] space-y-4 shadow-[0_1px_2px_rgba(0,0,0,0.4)]"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#232833] pb-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Official CyberArk Bulletin ID Badge */}
+                        <span className="font-mono text-sm font-extrabold text-[#30D158] bg-[#12241A] px-2.5 py-0.5 rounded-[6px] border border-[#30D158]/40 flex items-center gap-1">
+                          <Shield className="w-3.5 h-3.5 text-[#30D158]" />
+                          <span>{adv.bulletinId}</span>
+                        </span>
+
+                        {/* Associated CVE ID Badge */}
+                        <span className="font-mono text-xs font-bold text-[#FF453A] bg-[#2A1414] px-2.5 py-0.5 rounded-[6px] border border-[#FF453A]/40">
+                          {adv.cveId}
+                        </span>
+
+                        {/* CVSS Score & Severity */}
+                        <span
+                          className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-bold border ${getCvssColor(
+                            adv.cvss
+                          )}`}
+                        >
+                          CVSS {adv.cvss.toFixed(1)} ({adv.severity})
+                        </span>
+
+                        {/* Product / Component */}
+                        <span className="text-xs px-2.5 py-0.5 rounded-[6px] font-medium bg-[#1A1E27] text-[#A6AEC0] border border-[#2E3440]">
+                          {adv.product}
+                        </span>
+
+                        {/* Active Last 30 Days Badge */}
+                        {adv.isRecent30Days && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-[#FF9F0A]/20 text-[#FF9F0A] border border-[#FF9F0A]/40 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Active (Last 30 Days)</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="text-base font-bold text-[#F5F6F8] pt-1">
+                        {adv.title}
+                      </h3>
+                    </div>
+
+                    {/* Redirection Links */}
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-base font-bold text-[#FF453A] bg-[#2A1414] px-2.5 py-0.5 rounded-[6px] border border-[#FF453A]/40">
-                        {adv.cveId}
-                      </span>
-                      <span
-                        className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-bold border ${getCvssColor(
-                          adv.cvss
-                        )}`}
+                      {/* Direct Redirection to CyberArk Community Article */}
+                      <a
+                        href={adv.officialUrl || `https://community.cyberark.com/s/article/CyberArk-Security-Bulletin-${adv.bulletinId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-[#101E26] hover:bg-[#152833] text-[#64D2FF] text-xs font-semibold border border-[#64D2FF]/40 transition-colors shadow-sm"
+                        title={`Open official CyberArk Security Bulletin ${adv.bulletinId}`}
                       >
-                        CVSS {adv.cvss.toFixed(1)} ({adv.severity})
+                        <Shield className="w-3.5 h-3.5 text-[#64D2FF]" />
+                        <span>Bulletin {adv.bulletinId}</span>
+                        <ExternalLink className="w-3 h-3 text-[#64D2FF]" />
+                      </a>
+
+                      {/* Search on Community */}
+                      <a
+                        href={`https://community.cyberark.com/s/global-search/%40uri#q=${encodeURIComponent(adv.bulletinId)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] bg-[#1A1E27] hover:bg-[#232833] text-[#A6AEC0] hover:text-[#F5F6F8] text-xs font-semibold border border-[#2E3440] transition-colors"
+                        title={`Search CyberArk Community for ${adv.bulletinId}`}
+                      >
+                        <span>Community Search</span>
+                        <ExternalLink className="w-3 h-3 text-[#6E7787]" />
+                      </a>
+
+                      {/* Official CVE Record */}
+                      <a
+                        href={`https://www.cve.org/CVERecord?id=${adv.cveId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] bg-[#2A1414] hover:bg-[#2A1414]/80 text-[#FF453A] text-xs font-semibold border border-[#FF453A]/40 transition-colors"
+                        title="Official CVE Vulnerability Record (CVE.org / MITRE)"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-[#FF453A]" />
+                        <span>CVE Record</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-[#A6AEC0] leading-relaxed">
+                    {adv.description}
+                  </div>
+
+                  {/* Remediation & Affected */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3.5 rounded-[10px] bg-[#12241A] border border-[#30D158]/30 space-y-1">
+                      <span className="font-bold text-[#30D158] block uppercase tracking-wider">
+                        Remediation & Patch:
                       </span>
-                      <span className="text-xs px-2.5 py-0.5 rounded-[6px] font-medium bg-[#1A1E27] text-[#A6AEC0] border border-[#2E3440]">
-                        {adv.product}
+                      <p className="text-[#F5F6F8] leading-relaxed">
+                        {adv.remediation}
+                      </p>
+                      <span className="block text-[11px] text-[#30D158] pt-1 font-mono">
+                        Fixed In: {adv.fixedInVersion}
                       </span>
                     </div>
-                    <h3 className="text-base font-bold text-[#F5F6F8] pt-1">
-                      {adv.title}
-                    </h3>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`https://community.cyberark.com/s/global-search/%40uri#q=${encodeURIComponent(adv.cveId)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] bg-[#1A1E27] hover:bg-[#232833] text-[#A6AEC0] hover:text-[#F5F6F8] text-xs font-semibold border border-[#2E3440] transition-colors"
-                      title="Search CyberArk Technical Community Knowledge Base & Security Bulletins"
-                    >
-                      <Shield className="w-3.5 h-3.5 text-[#FF9F0A]" />
-                      <span>CyberArk Community</span>
-                      <ExternalLink className="w-3 h-3 text-[#6E7787]" />
-                    </a>
-
-                    <a
-                      href={adv.officialUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] bg-[#2A1414] hover:bg-[#2A1414]/80 text-[#FF453A] text-xs font-semibold border border-[#FF453A]/40 transition-colors"
-                      title="Official CVE Vulnerability Record (CVE.org / MITRE)"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5 text-[#FF453A]" />
-                      <span>CVE Record</span>
-                    </a>
+                    <div className="p-3.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] space-y-1">
+                      <span className="font-bold text-[#A6AEC0] block uppercase tracking-wider">
+                        Affected Versions:
+                      </span>
+                      <p className="text-[#F5F6F8] font-mono text-xs">
+                        {adv.affectedVersions.join(', ')}
+                      </p>
+                      <div className="flex items-center justify-between text-[11px] text-[#6E7787] pt-1">
+                        <span>Published: <strong className="text-[#F5F6F8]">{adv.publishDate}</strong></span>
+                        {adv.isRecent30Days && (
+                          <span className="text-[#FF9F0A] font-semibold">Active in Last 30 Days</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                <div className="text-sm text-[#A6AEC0] leading-relaxed">
-                  {adv.description}
-                </div>
-
-                {/* Remediation & Affected */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  <div className="p-3.5 rounded-[10px] bg-[#12241A] border border-[#30D158]/30 space-y-1">
-                    <span className="font-bold text-[#30D158] block uppercase tracking-wider">
-                      Remediation & Patch:
-                    </span>
-                    <p className="text-[#F5F6F8] leading-relaxed">
-                      {adv.remediation}
-                    </p>
-                    <span className="block text-[11px] text-[#30D158] pt-1 font-mono">
-                      Fixed In: {adv.fixedInVersion}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] space-y-1">
-                    <span className="font-bold text-[#A6AEC0] block uppercase tracking-wider">
-                      Affected Versions:
-                    </span>
-                    <p className="text-[#F5F6F8] font-mono text-xs">
-                      {adv.affectedVersions.join(', ')}
-                    </p>
-                    <span className="block text-[11px] text-[#6E7787] pt-1">
-                      Published: {adv.publishDate}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}

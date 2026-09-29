@@ -70,6 +70,7 @@ export interface UpdateRelease {
 
 export interface SecurityAdvisory {
   id: string;
+  bulletinId: string; // Official CyberArk Bulletin ID (e.g., CA26-47)
   cveId: string;
   product: string;
   severity: SeverityLevel;
@@ -81,6 +82,9 @@ export interface SecurityAdvisory {
   affectedVersions: string[];
   fixedInVersion: string;
   officialUrl: string;
+  bulletinUrl?: string;
+  trustCenterUrl?: string;
+  isRecent30Days?: boolean;
 }
 
 export interface MarketplaceItem {
