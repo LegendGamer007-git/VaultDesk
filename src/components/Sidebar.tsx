@@ -125,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         <div className="px-2 text-[11px] text-[#B1B2CA] dark:text-[#6E7787] text-center font-mono">
-          VaultDesk v14.0 • BankDash UI
+          VaultDesk v14.0 • PAM Assistant
         </div>
       </div>
     </aside>

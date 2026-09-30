@@ -767,7 +767,7 @@ export default function App() {
       <footer className="border-t border-[#E6EFF5] dark:border-white/10 bg-white dark:bg-[#12151F] py-6 text-xs text-[#8BA3CB] dark:text-[#A0AEC0] transition-colors">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-[#343C6A] dark:text-white">VaultDesk BankDash</span>
+            <span className="font-bold text-[#343C6A] dark:text-white">VaultDesk</span>
             <span>•</span>
             <span>Community PAM Troubleshooting Assistant & Operations Hub</span>
           </div>

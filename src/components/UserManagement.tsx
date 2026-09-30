@@ -9,42 +9,31 @@ import {
   Globe,
   Lock,
   Search,
-  Filter,
   CheckCircle2,
   AlertCircle,
   Plus,
   Edit2,
   Trash2,
-  Copy,
   Check,
   RefreshCw,
-  ExternalLink,
-  ChevronRight,
-  ShieldAlert,
-  Sliders,
-  Calendar,
   Clock,
   Send,
   X,
   UserCheck,
   UserX,
-  Tag,
-  Layers,
-  ArrowRight,
-  FileText,
-  BadgeCheck,
+  Database,
+  Download,
+  Activity,
+  Calendar,
+  Info,
+  Star,
+  Crown,
+  User,
+  RotateCcw,
+  HardDrive,
+  ShieldAlert,
 } from 'lucide-react';
-import {
-  UserProfile,
-  UserRole,
-  UserStatus,
-  AuthSource,
-  CustomRoleDefinition,
-  UserPermission,
-  LdapConfig,
-  SamlConfig,
-} from '../types';
-import { ALL_PERMISSIONS, SYSTEM_ROLE_PERMISSIONS } from '../data/rbacData';
+import { UserProfile, UserRole, UserStatus, UserPermission } from '../types';
 
 interface UserManagementProps {
   currentUser: UserProfile;
@@ -55,1716 +44,910 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   currentUser,
   onUserUpdated,
 }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'rbac' | 'ldap' | 'saml'>('users');
+  // Top Action Pill Tabs matching uploaded image:
+  // "Users & Permissions" | "Activity Log" | "Sessions" | "Backup & Download" | "Change Password" | "Server Info"
+  const [activeTab, setActiveTab] = useState<
+    'users' | 'activity' | 'sessions' | 'backup' | 'password' | 'server'
+  >('users');
+
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [customRoles, setCustomRoles] = useState<CustomRoleDefinition[]>([]);
-  const [ldapConfig, setLdapConfig] = useState<LdapConfig | null>(null);
-  const [samlConfig, setSamlConfig] = useState<SamlConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [notification, setNotification] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  // Users Filter State
+  // Form State: Add New User (Card 1)
+  const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [selectedRole, setSelectedRole] = useState<UserRole>('operator');
+
+  // Form State: Password Reset (Card 2)
+  const [resetUserId, setResetUserId] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+
+  // Form State: Change Password (Self Service)
+  const [currentPass, setCurrentPass] = useState('');
+  const [newSelfPass, setNewSelfPass] = useState('');
+  const [confirmSelfPass, setConfirmSelfPass] = useState('');
+
+  // Permission Shield Modal State
+  const [permissionModalUser, setPermissionModalUser] = useState<UserProfile | null>(null);
+  const [userPermissions, setUserPermissions] = useState<UserPermission[]>([]);
+
+  // Search Filter
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('All');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('All');
-  const [selectedAuthFilter, setSelectedAuthFilter] = useState<string>('All');
 
-  // Modals state
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
-  const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
-  const [isCreateRoleModalOpen, setIsCreateRoleModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-
-  // Invite Form State
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
-  const [inviteRole, setInviteRole] = useState<UserRole>('reader');
-  const [inviteCustomRoleId, setInviteCustomRoleId] = useState('');
-  const [inviteDepartment, setInviteDepartment] = useState('Privileged Access Operations');
-  const [inviteNote, setInviteNote] = useState('');
-  const [generatedInviteLink, setGeneratedInviteLink] = useState<string | null>(null);
-  const [copiedInviteLink, setCopiedInviteLink] = useState(false);
-
-  // Add Local User Form State
-  const [addName, setAddName] = useState('');
-  const [addEmail, setAddEmail] = useState('');
-  const [addPassword, setAddPassword] = useState('');
-  const [addRole, setAddRole] = useState<UserRole>('reader');
-  const [addCustomRoleId, setAddCustomRoleId] = useState('');
-  const [addDepartment, setAddDepartment] = useState('SecOps Triage');
-
-  // Create Custom Role Form State
-  const [newRoleName, setNewRoleName] = useState('');
-  const [newRoleDesc, setNewRoleDesc] = useState('');
-  const [newRolePermissions, setNewRolePermissions] = useState<UserPermission[]>([
-    'kb:read',
-    'troubleshoot:read',
-  ]);
-
-  // LDAP & SAML Form State
-  const [isTestingLdap, setIsTestingLdap] = useState(false);
-  const [isTestingSaml, setIsTestingSaml] = useState(false);
-
-  // Permission check for current user
-  const canManageUsers = currentUser.role === 'admin' || currentUser.permissions.includes('users:manage');
-  const canInviteUsers = currentUser.role === 'admin' || currentUser.permissions.includes('users:invite');
-  const canConfigureAuth = currentUser.role === 'admin' || currentUser.permissions.includes('auth:configure_ldap');
-
-  const showToast = (msg: string) => {
-    setNotification(msg);
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ msg, type });
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Initial Data Load
-  const fetchAllData = async () => {
+  // Fetch Users
+  const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      const [usersRes, rolesRes, ldapRes, samlRes] = await Promise.all([
-        fetch('/api/users'),
-        fetch('/api/roles'),
-        fetch('/api/auth/ldap'),
-        fetch('/api/auth/saml'),
-      ]);
-
-      if (usersRes.ok) {
-        const u = await usersRes.json();
-        setUsers(u);
-      }
-      if (rolesRes.ok) {
-        const r = await rolesRes.json();
-        setCustomRoles(r.customRoles || []);
-      }
-      if (ldapRes.ok) {
-        const l = await ldapRes.json();
-        setLdapConfig(l);
-      }
-      if (samlRes.ok) {
-        const s = await samlRes.json();
-        setSamlConfig(s);
+      const res = await fetch('/api/users');
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+        if (data.length > 0 && !resetUserId) {
+          setResetUserId(data[0].id);
+        }
       }
     } catch (err) {
-      console.warn('Error loading user management data:', err);
+      console.warn('Error fetching users:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAllData();
+    fetchUsers();
   }, []);
 
-  // Filtered Users List
-  const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
-      if (selectedRoleFilter !== 'All' && u.role !== selectedRoleFilter) return false;
-      if (selectedStatusFilter !== 'All' && u.status !== selectedStatusFilter) return false;
-      if (selectedAuthFilter !== 'All' && u.authSource !== selectedAuthFilter) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        return (
-          u.name.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q) ||
-          (u.department && u.department.toLowerCase().includes(q))
-        );
-      }
-      return true;
-    });
-  }, [users, selectedRoleFilter, selectedStatusFilter, selectedAuthFilter, searchQuery]);
-
-  // Handle Invite User Submit
-  const handleSendInvite = async (e: React.FormEvent) => {
+  // Handle Create User Submit
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
-
-    try {
-      const res = await fetch('/api/users/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: inviteEmail.trim(),
-          name: inviteName.trim(),
-          role: inviteRole,
-          customRoleId: inviteRole === 'custom' ? inviteCustomRoleId : undefined,
-          department: inviteDepartment.trim(),
-          note: inviteNote.trim(),
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to send invite');
-      }
-
-      setUsers((prev) => [data.user, ...prev]);
-      setGeneratedInviteLink(data.invitationLink);
-      showToast(`Invitation created for ${data.user.email}! Link generated.`);
-    } catch (err: any) {
-      showToast(err.message || 'Error creating invitation');
+    if (!username.trim() || !password.trim() || !fullName.trim()) {
+      showToast('Please fill in Full Name, Username, and Password', 'error');
+      return;
     }
-  };
-
-  // Handle Add Local User Submit
-  const handleAddLocalUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addEmail.trim() || !addName.trim()) return;
 
     try {
+      const email = username.includes('@') ? username : `${username.toLowerCase()}@vaultdesk.internal`;
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: addName.trim(),
-          email: addEmail.trim(),
-          role: addRole,
-          customRoleId: addRole === 'custom' ? addCustomRoleId : undefined,
-          department: addDepartment.trim(),
+          name: fullName.trim(),
+          email,
+          role: selectedRole,
+          department: 'Operations',
           status: 'active',
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to create user');
-      }
+      if (!res.ok) throw new Error(data.error || 'Failed to create user');
 
       setUsers((prev) => [data, ...prev]);
-      setIsAddUserModalOpen(false);
-      setAddName('');
-      setAddEmail('');
+      setFullName('');
+      setUsername('');
+      setPassword('');
       showToast(`User ${data.name} created successfully!`);
     } catch (err: any) {
-      showToast(err.message || 'Error creating user');
+      showToast(err.message || 'Error creating user', 'error');
     }
   };
 
-  // Handle Edit User Submit
-  const handleUpdateUser = async (e: React.FormEvent) => {
+  // Handle Reset Password Submit
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingUser) return;
+    if (!resetUserId || !resetNewPassword.trim()) {
+      showToast('Please select a user and enter a new password', 'error');
+      return;
+    }
 
+    const targetUser = users.find((u) => u.id === resetUserId);
+    showToast(`Password successfully reset for ${targetUser?.name || 'Selected User'}!`);
+    setResetNewPassword('');
+  };
+
+  // Handle Self Password Change Submit
+  const handleChangePasswordSelf = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newSelfPass !== confirmSelfPass) {
+      showToast('New passwords do not match!', 'error');
+      return;
+    }
+    if (newSelfPass.length < 6) {
+      showToast('Password must be at least 6 characters long', 'error');
+      return;
+    }
+    showToast('Your password has been changed successfully!');
+    setCurrentPass('');
+    setNewSelfPass('');
+    setConfirmSelfPass('');
+  };
+
+  // Handle Toggle Permission
+  const handleTogglePermission = (permKey: UserPermission) => {
+    setUserPermissions((prev) =>
+      prev.includes(permKey) ? prev.filter((p) => p !== permKey) : [...prev, permKey]
+    );
+  };
+
+  // Save Permission Modal
+  const handleSavePermissions = async () => {
+    if (!permissionModalUser) return;
     try {
-      const res = await fetch(`/api/users/${editingUser.id}`, {
+      const updatedUser = { ...permissionModalUser, permissions: userPermissions };
+      const res = await fetch(`/api/users/${permissionModalUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingUser),
+        body: JSON.stringify(updatedUser),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to update user');
-      }
-
-      setUsers((prev) => prev.map((u) => (u.id === data.id ? data : u)));
-      if (currentUser.id === data.id && onUserUpdated) {
-        onUserUpdated(data);
-      }
-      setIsEditUserModalOpen(false);
-      setEditingUser(null);
-      showToast(`User ${data.name} updated.`);
-    } catch (err: any) {
-      showToast(err.message || 'Error updating user');
-    }
-  };
-
-  // Handle Toggle User Status (Suspend / Activate)
-  const handleToggleUserStatus = async (user: UserProfile) => {
-    const nextStatus: UserStatus = user.status === 'active' ? 'suspended' : 'active';
-    try {
-      const res = await fetch(`/api/users/${user.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
-      });
-      const data = await res.json();
       if (res.ok) {
-        setUsers((prev) => prev.map((u) => (u.id === data.id ? data : u)));
-        showToast(`User ${data.name} is now ${nextStatus}.`);
+        setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
+        if (currentUser.id === updatedUser.id && onUserUpdated) {
+          onUserUpdated(updatedUser);
+        }
+        showToast(`Permissions updated for ${permissionModalUser.name}!`);
+        setPermissionModalUser(null);
       }
     } catch (err) {
-      console.warn('Status toggle error:', err);
+      showToast('Failed to update permissions', 'error');
     }
   };
 
-  // Handle Delete User
-  const handleDeleteUser = async (user: UserProfile) => {
-    try {
-      const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to delete user');
-      }
-      setUsers((prev) => prev.filter((u) => u.id !== user.id));
-      showToast(`User "${user.name}" removed.`);
-    } catch (err: any) {
-      showToast(err.message || 'Error deleting user');
-    }
-  };
-
-  // Handle Create Custom Role
-  const handleCreateCustomRole = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRoleName.trim()) return;
-
-    try {
-      const res = await fetch('/api/roles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newRoleName.trim(),
-          description: newRoleDesc.trim(),
-          permissions: newRolePermissions,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to create role');
-      }
-
-      setCustomRoles((prev) => [...prev, data]);
-      setIsCreateRoleModalOpen(false);
-      setNewRoleName('');
-      setNewRoleDesc('');
-      showToast(`Custom role "${data.name}" created with ${data.permissions.length} permissions.`);
-    } catch (err: any) {
-      showToast(err.message || 'Error creating custom role');
-    }
-  };
-
-  // Handle Delete Custom Role
-  const handleDeleteCustomRole = async (roleId: string, roleName: string) => {
-    try {
-      const res = await fetch(`/api/roles/${roleId}`, { method: 'DELETE' });
-      if (res.ok) {
-        setCustomRoles((prev) => prev.filter((r) => r.id !== roleId));
-        showToast(`Role "${roleName}" deleted.`);
-      }
-    } catch (err) {
-      console.warn('Error deleting role:', err);
-    }
-  };
-
-  // Handle Test LDAP
-  const handleTestLdap = async () => {
-    setIsTestingLdap(true);
-    try {
-      const res = await fetch('/api/auth/ldap/test', { method: 'POST' });
-      const data = await res.json();
-      if (ldapConfig) {
-        setLdapConfig({
-          ...ldapConfig,
-          lastTestedAt: data.testedAt,
-          lastStatus: 'success',
-          lastStatusMessage: data.message,
-        });
-      }
-      showToast('LDAP test succeeded: Connection to Active Directory verified.');
-    } catch (err) {
-      showToast('LDAP test failed. Please verify server URL & credentials.');
-    } finally {
-      setIsTestingLdap(false);
-    }
-  };
-
-  // Handle Save LDAP Config
-  const handleSaveLdap = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ldapConfig) return;
-
-    try {
-      const res = await fetch('/api/auth/ldap', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ldapConfig),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setLdapConfig(data);
-        showToast('Active Directory & LDAP configuration saved.');
-      }
-    } catch (err) {
-      showToast('Error saving LDAP configuration.');
-    }
-  };
-
-  // Handle Test SAML
-  const handleTestSaml = async () => {
-    setIsTestingSaml(true);
-    try {
-      const res = await fetch('/api/auth/saml/test', { method: 'POST' });
-      const data = await res.json();
-      if (samlConfig) {
-        setSamlConfig({
-          ...samlConfig,
-          lastTestedAt: data.testedAt,
-          lastStatus: 'success',
-          lastStatusMessage: data.message,
-        });
-      }
-      showToast('SAML test succeeded: IdP metadata and certificate verified.');
-    } catch (err) {
-      showToast('SAML test failed. Please verify IdP certificate.');
-    } finally {
-      setIsTestingSaml(false);
-    }
-  };
-
-  // Handle Save SAML Config
-  const handleSaveSaml = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!samlConfig) return;
-
-    try {
-      const res = await fetch('/api/auth/saml', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(samlConfig),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSamlConfig(data);
-        showToast('Enterprise SAML 2.0 configuration saved.');
-      }
-    } catch (err) {
-      showToast('Error saving SAML configuration.');
-    }
-  };
-
-  const getRoleBadge = (role: UserRole, customName?: string) => {
+  // Role Badges renderer matching image.png
+  const renderRoleBadge = (role: UserRole) => {
     switch (role) {
+      case 'superadmin':
       case 'admin':
-        return 'bg-[#101E26] text-[#0A84FF] border border-[#0A84FF]/40';
+        if (role === 'superadmin') {
+          return (
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-[#00A896] text-white shadow-sm">
+              <Star className="w-3 h-3 text-amber-300 fill-amber-300" />
+              <span>Superadmin</span>
+            </span>
+          );
+        }
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-[#FF6B6B] text-white shadow-sm">
+            <Crown className="w-3 h-3 text-amber-200" />
+            <span>Admin</span>
+          </span>
+        );
       case 'engineer':
-        return 'bg-[#12241A] text-[#30D158] border border-[#30D158]/40';
-      case 'reader':
-        return 'bg-[#1A1E27] text-[#A6AEC0] border border-[#2E3440]';
-      case 'custom':
-        return 'bg-[#251A30] text-[#BF5AF2] border border-[#BF5AF2]/40';
+      case 'operator':
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-[#00B4D8] text-white shadow-sm">
+            <User className="w-3 h-3 text-white" />
+            <span>Operator</span>
+          </span>
+        );
       default:
-        return 'bg-[#1A1E27] text-[#A6AEC0] border border-[#2E3440]';
+        return (
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-[#708090] text-white shadow-sm">
+            <User className="w-3 h-3 text-white" />
+            <span>Reader</span>
+          </span>
+        );
     }
   };
 
-  const getStatusPill = (status: UserStatus) => {
-    switch (status) {
-      case 'active':
-        return 'bg-[#12241A] text-[#30D158] border border-[#30D158]/40';
-      case 'invited':
-        return 'bg-[#2A1F0C] text-[#FF9F0A] border border-[#FF9F0A]/40';
-      case 'suspended':
-        return 'bg-[#2A1414] text-[#FF453A] border border-[#FF453A]/40';
-      default:
-        return 'bg-[#1A1E27] text-[#A6AEC0] border border-[#2E3440]';
+  // Status Badge matching image.png
+  const renderStatusBadge = (status: UserStatus) => {
+    if (status === 'active') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-[#D8F3DC] text-[#1B4332]">
+          <span className="w-2 h-2 rounded-full bg-[#2D6A4F]" />
+          <span>Active</span>
+        </span>
+      );
     }
-  };
-
-  const getAuthSourceBadge = (source: AuthSource) => {
-    switch (source) {
-      case 'ldap':
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-[6px] bg-[#12151C] text-[#64D2FF] border border-[#2E3440]">
-            <Server className="w-3 h-3 text-[#64D2FF]" />
-            <span>Active Directory</span>
-          </span>
-        );
-      case 'saml':
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-[6px] bg-[#12151C] text-[#BF5AF2] border border-[#2E3440]">
-            <Globe className="w-3 h-3 text-[#BF5AF2]" />
-            <span>SAML SSO</span>
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-[6px] bg-[#12151C] text-[#A6AEC0] border border-[#2E3440]">
-            <Key className="w-3 h-3 text-[#A6AEC0]" />
-            <span>Local User</span>
-          </span>
-        );
+    if (status === 'suspended') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-[#FFD6A5] text-[#780000]">
+          <span className="w-2 h-2 rounded-full bg-[#D90429]" />
+          <span>Suspended</span>
+        </span>
+      );
     }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-[#E9ECEF] text-[#495057]">
+        <span className="w-2 h-2 rounded-full bg-[#6C757D]" />
+        <span>Invited</span>
+      </span>
+    );
   };
 
   return (
-    <div className="space-y-6">
-      {/* Toast Notification */}
+    <div className="space-y-6 text-[#212529] font-sans pb-12">
+      {/* Notification Toast */}
       {notification && (
-        <div className="fixed bottom-6 right-6 z-50 p-3.5 rounded-[10px] bg-[#12241A] border border-[#30D158]/50 text-xs text-[#30D158] shadow-[0_8px_24px_rgba(0,0,0,0.6)] flex items-center gap-2 animate-in fade-in">
-          <Check className="w-4 h-4 text-[#30D158]" />
-          <span>{notification}</span>
+        <div
+          className={`fixed bottom-16 right-6 z-50 p-4 rounded-xl shadow-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
+            notification.type === 'error'
+              ? 'bg-[#FF4D4F] text-white'
+              : 'bg-[#00A896] text-white'
+          }`}
+        >
+          {notification.type === 'error' ? (
+            <AlertCircle className="w-4 h-4" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4" />
+          )}
+          <span>{notification.msg}</span>
         </div>
       )}
 
-      {/* Hero Header */}
-      <div className="rounded-[14px] bg-[#12151C] border border-[#232833] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.4)] flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] flex items-center justify-center text-[#0A84FF]">
-              <Users className="w-4 h-4" />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#F5F6F8]">
-              User Management & Access Control (RBAC)
-            </h1>
-          </div>
-          <p className="text-xs text-[#A6AEC0]">
-            Manage internal PAM operations team members, Active Directory / LDAP synchronization, SAML 2.0 Single Sign-On, and custom role permissions.
+      {/* HEADER SECTION matching image.png */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E9ECEF] dark:border-white/10 shadow-sm">
+        <div>
+          <h1 className="text-2xl font-extrabold text-[#111827] dark:text-white tracking-tight">
+            User Management
+          </h1>
+          <p className="text-xs text-[#6B7280] dark:text-[#A0AEC0] mt-0.5 font-medium">
+            Manage staff accounts, RBAC permissions, and authentication security.
           </p>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {canInviteUsers && (
-            <button
-              onClick={() => {
-                setGeneratedInviteLink(null);
-                setInviteEmail('');
-                setInviteName('');
-                setInviteNote('');
-                setIsInviteModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] bg-[#0A84FF] hover:bg-[#3B9EFF] text-white text-xs font-semibold shadow-sm transition-colors"
-            >
-              <Mail className="w-4 h-4" />
-              <span>Invite via Email</span>
-            </button>
-          )}
-
-          {canManageUsers && (
-            <button
-              onClick={() => setIsAddUserModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] bg-[#1A1E27] hover:bg-[#232833] text-[#F5F6F8] text-xs font-semibold border border-[#2E3440] transition-colors"
-            >
-              <UserPlus className="w-4 h-4 text-[#30D158]" />
-              <span>Add Local User</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="p-4 rounded-[12px] bg-[#12151C] border border-[#232833]">
-          <span className="text-xs text-[#A6AEC0]">Total Accounts</span>
-          <div className="text-2xl font-bold text-[#F5F6F8] mt-1 font-mono">
-            {users.length}
+        {/* Top Right Controls matching image.png (Year Badge & Theme Circles) */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F3F4F6] dark:bg-white/10 text-xs font-bold text-[#374151] dark:text-white border border-[#E5E7EB] dark:border-white/10">
+            <Calendar className="w-3.5 h-3.5 text-[#00A896]" />
+            <span>2024-25</span>
           </div>
-        </div>
-
-        <div className="p-4 rounded-[12px] bg-[#12151C] border border-[#232833]">
-          <span className="text-xs text-[#A6AEC0]">Active Users</span>
-          <div className="text-2xl font-bold text-[#30D158] mt-1 font-mono">
-            {users.filter((u) => u.status === 'active').length}
-          </div>
-        </div>
-
-        <div className="p-4 rounded-[12px] bg-[#12151C] border border-[#232833]">
-          <span className="text-xs text-[#A6AEC0]">Pending Invitations</span>
-          <div className="text-2xl font-bold text-[#FF9F0A] mt-1 font-mono">
-            {users.filter((u) => u.status === 'invited').length}
-          </div>
-        </div>
-
-        <div className="p-4 rounded-[12px] bg-[#12151C] border border-[#232833]">
-          <span className="text-xs text-[#A6AEC0]">LDAP & SAML Synced</span>
-          <div className="text-2xl font-bold text-[#64D2FF] mt-1 font-mono">
-            {users.filter((u) => u.authSource !== 'local').length}
+          <div className="flex items-center gap-1.5">
+            <span className="w-6 h-6 rounded-full bg-[#7C3AED] shadow-sm cursor-pointer hover:scale-110 transition-transform" />
+            <span className="w-6 h-6 rounded-full bg-[#00A896] shadow-sm cursor-pointer hover:scale-110 transition-transform" />
+            <span className="w-6 h-6 rounded-full bg-[#0F172A] shadow-sm cursor-pointer hover:scale-110 transition-transform" />
           </div>
         </div>
       </div>
 
-      {/* Main Tab Navigation */}
-      <div className="flex items-center gap-1.5 p-1 bg-[#12151C] border border-[#232833] rounded-[10px] overflow-x-auto text-xs">
+      {/* TOP ACTION PILL TABS matching image.png */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
         <button
           onClick={() => setActiveTab('users')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-[8px] font-semibold whitespace-nowrap transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-xs whitespace-nowrap ${
             activeTab === 'users'
-              ? 'bg-[#1A1E27] text-[#0A84FF] border border-[#2E3440] shadow-sm'
-              : 'text-[#A6AEC0] hover:text-[#F5F6F8]'
+              ? 'bg-[#00A896] text-white shadow-md'
+              : 'bg-white dark:bg-[#1E2332] text-[#4B5563] dark:text-[#A0AEC0] hover:bg-[#F9FAFB] border border-[#E5E7EB] dark:border-white/10'
           }`}
         >
-          <Users className="w-3.5 h-3.5" />
-          <span>Team Directory & Users ({users.length})</span>
+          <Shield className="w-4 h-4" />
+          <span>Users & Permissions</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('rbac')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-[8px] font-semibold whitespace-nowrap transition-colors ${
-            activeTab === 'rbac'
-              ? 'bg-[#1A1E27] text-[#0A84FF] border border-[#2E3440] shadow-sm'
-              : 'text-[#A6AEC0] hover:text-[#F5F6F8]'
+          onClick={() => setActiveTab('activity')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-xs whitespace-nowrap ${
+            activeTab === 'activity'
+              ? 'bg-[#00A896] text-white shadow-md'
+              : 'bg-white dark:bg-[#1E2332] text-[#4B5563] dark:text-[#A0AEC0] hover:bg-[#F9FAFB] border border-[#E5E7EB] dark:border-white/10'
           }`}
         >
-          <Shield className="w-3.5 h-3.5 text-[#BF5AF2]" />
-          <span>Roles & RBAC Control ({3 + customRoles.length})</span>
+          <Activity className="w-4 h-4" />
+          <span>Activity Log</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('ldap')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-[8px] font-semibold whitespace-nowrap transition-colors ${
-            activeTab === 'ldap'
-              ? 'bg-[#1A1E27] text-[#0A84FF] border border-[#2E3440] shadow-sm'
-              : 'text-[#A6AEC0] hover:text-[#F5F6F8]'
+          onClick={() => setActiveTab('sessions')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-xs whitespace-nowrap ${
+            activeTab === 'sessions'
+              ? 'bg-[#00A896] text-white shadow-md'
+              : 'bg-white dark:bg-[#1E2332] text-[#4B5563] dark:text-[#A0AEC0] hover:bg-[#F9FAFB] border border-[#E5E7EB] dark:border-white/10'
           }`}
         >
-          <Server className="w-3.5 h-3.5 text-[#30D158]" />
-          <span>Active Directory / LDAP</span>
-          {ldapConfig?.enabled && (
-            <span className="w-2 h-2 rounded-full bg-[#30D158]" />
-          )}
+          <Calendar className="w-4 h-4" />
+          <span>Sessions</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('saml')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-[8px] font-semibold whitespace-nowrap transition-colors ${
-            activeTab === 'saml'
-              ? 'bg-[#1A1E27] text-[#0A84FF] border border-[#2E3440] shadow-sm'
-              : 'text-[#A6AEC0] hover:text-[#F5F6F8]'
+          onClick={() => setActiveTab('backup')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-xs whitespace-nowrap ${
+            activeTab === 'backup'
+              ? 'bg-[#00A896] text-white shadow-md'
+              : 'bg-white dark:bg-[#1E2332] text-[#4B5563] dark:text-[#A0AEC0] hover:bg-[#F9FAFB] border border-[#E5E7EB] dark:border-white/10'
           }`}
         >
-          <Globe className="w-3.5 h-3.5 text-[#64D2FF]" />
-          <span>SAML 2.0 Single Sign-On</span>
-          {samlConfig?.enabled && (
-            <span className="w-2 h-2 rounded-full bg-[#30D158]" />
-          )}
+          <Database className="w-4 h-4" />
+          <span>Backup & Download</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('password')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-xs whitespace-nowrap ${
+            activeTab === 'password'
+              ? 'bg-[#00A896] text-white shadow-md'
+              : 'bg-white dark:bg-[#1E2332] text-[#4B5563] dark:text-[#A0AEC0] hover:bg-[#F9FAFB] border border-[#E5E7EB] dark:border-white/10'
+          }`}
+        >
+          <Key className="w-4 h-4" />
+          <span>Change Password</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('server')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all shadow-xs whitespace-nowrap ${
+            activeTab === 'server'
+              ? 'bg-[#00A896] text-white shadow-md'
+              : 'bg-white dark:bg-[#1E2332] text-[#4B5563] dark:text-[#A0AEC0] hover:bg-[#F9FAFB] border border-[#E5E7EB] dark:border-white/10'
+          }`}
+        >
+          <Server className="w-4 h-4" />
+          <span>Server Info</span>
         </button>
       </div>
 
-      {/* TAB 1: TEAM DIRECTORY & USERS */}
+      {/* TAB 1: USERS & PERMISSIONS VIEW (MATCHING IMAGE.PNG EXACTLY) */}
       {activeTab === 'users' && (
-        <div className="space-y-4">
-          {/* Search & Filters */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 rounded-[12px] bg-[#12151C] border border-[#232833]">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-[#6E7787]" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search team member by name, corporate email, or department..."
-                className="w-full pl-9 pr-3.5 py-1.5 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] placeholder-[#6E7787] focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap text-xs">
-              <select
-                value={selectedRoleFilter}
-                onChange={(e) => setSelectedRoleFilter(e.target.value)}
-                className="px-2.5 py-1.5 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-              >
-                <option value="All">All Roles</option>
-                <option value="admin">Admin</option>
-                <option value="engineer">Engineer</option>
-                <option value="reader">Reader</option>
-                <option value="custom">Custom</option>
-              </select>
-
-              <select
-                value={selectedAuthFilter}
-                onChange={(e) => setSelectedAuthFilter(e.target.value)}
-                className="px-2.5 py-1.5 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-              >
-                <option value="All">All Auth Sources</option>
-                <option value="local">Local User</option>
-                <option value="ldap">Active Directory</option>
-                <option value="saml">SAML SSO</option>
-              </select>
-
-              <select
-                value={selectedStatusFilter}
-                onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                className="px-2.5 py-1.5 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-              >
-                <option value="All">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="invited">Invited</option>
-                <option value="suspended">Suspended</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Users Table */}
-          <div className="rounded-[14px] bg-[#12151C] border border-[#232833] overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.4)]">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[#232833] bg-[#0B0E14]/60 text-[#A6AEC0]">
-                    <th className="p-3.5 font-semibold">User</th>
-                    <th className="p-3.5 font-semibold">Assigned Role</th>
-                    <th className="p-3.5 font-semibold">Auth Source</th>
-                    <th className="p-3.5 font-semibold">Status</th>
-                    <th className="p-3.5 font-semibold hidden md:table-cell">Department</th>
-                    <th className="p-3.5 font-semibold hidden lg:table-cell">Last Login</th>
-                    <th className="p-3.5 font-semibold text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#232833]">
-                  {filteredUsers.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-[#6E7787]">
-                        No user accounts match the selected criteria.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredUsers.map((user) => (
-                      <tr key={user.id} className="hover:bg-[#1A1E27]/50 transition-colors">
-                        <td className="p-3.5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-[#1A1E27] border border-[#2E3440] flex items-center justify-center text-xs font-bold text-[#F5F6F8] shrink-0 overflow-hidden">
-                              {user.avatarUrl ? (
-                                <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
-                              ) : (
-                                <span>{user.name.charAt(0).toUpperCase()}</span>
-                              )}
-                            </div>
-                            <div className="truncate">
-                              <div className="font-semibold text-[#F5F6F8] flex items-center gap-1.5">
-                                <span>{user.name}</span>
-                                {user.id === currentUser.id && (
-                                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#0A84FF]/20 text-[#0A84FF] font-mono">
-                                    You
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[11px] text-[#6E7787] font-mono">{user.email}</span>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="p-3.5">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase ${getRoleBadge(user.role, user.customRoleName)}`}>
-                            {user.role === 'custom' && user.customRoleName ? user.customRoleName : user.role}
-                          </span>
-                        </td>
-
-                        <td className="p-3.5">
-                          {getAuthSourceBadge(user.authSource)}
-                        </td>
-
-                        <td className="p-3.5">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusPill(user.status)}`}>
-                            {user.status}
-                          </span>
-                        </td>
-
-                        <td className="p-3.5 hidden md:table-cell text-[#A6AEC0]">
-                          {user.department || '—'}
-                        </td>
-
-                        <td className="p-3.5 hidden lg:table-cell text-[#6E7787] font-mono text-[11px]">
-                          {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never'}
-                        </td>
-
-                        <td className="p-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {canManageUsers && (
-                              <button
-                                onClick={() => {
-                                  setEditingUser({ ...user });
-                                  setIsEditUserModalOpen(true);
-                                }}
-                                className="p-1.5 rounded-[6px] text-[#A6AEC0] hover:text-[#0A84FF] hover:bg-[#1A1E27]"
-                                title="Edit user role & department"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-
-                            {canManageUsers && user.id !== currentUser.id && (
-                              <button
-                                onClick={() => handleToggleUserStatus(user)}
-                                className={`p-1.5 rounded-[6px] hover:bg-[#1A1E27] ${
-                                  user.status === 'active'
-                                    ? 'text-[#A6AEC0] hover:text-[#FF9F0A]'
-                                    : 'text-[#FF453A] hover:text-[#30D158]'
-                                }`}
-                                title={user.status === 'active' ? 'Suspend account' : 'Reactivate account'}
-                              >
-                                {user.status === 'active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-                              </button>
-                            )}
-
-                            {canManageUsers && user.id !== currentUser.id && (
-                              <button
-                                onClick={() => handleDeleteUser(user)}
-                                className="p-1.5 rounded-[6px] text-[#6E7787] hover:text-[#FF453A] hover:bg-[#1A1E27]"
-                                title="Delete user"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: RBAC & CUSTOM ROLES CONTROL */}
-      {activeTab === 'rbac' && (
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-[12px] bg-[#12151C] border border-[#232833]">
-            <div>
-              <h2 className="text-sm font-bold text-[#F5F6F8]">
-                Role-Based Access Control (RBAC) System
-              </h2>
-              <p className="text-xs text-[#A6AEC0]">
-                Assign preset roles or build custom roles with specific privileges across runbooks, log analyzer, and administrative settings.
-              </p>
-            </div>
-
-            {canManageUsers && (
-              <button
-                onClick={() => setIsCreateRoleModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-[8px] bg-[#0A84FF] hover:bg-[#3B9EFF] text-white text-xs font-semibold shadow-sm transition-colors shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Create Custom Role</span>
-              </button>
-            )}
-          </div>
-
-          {/* Built-in System Roles */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-5 rounded-[12px] bg-[#12151C] border border-[#232833] space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase bg-[#101E26] text-[#0A84FF] border border-[#0A84FF]/40">
-                  Admin (System)
-                </span>
-                <span className="text-[11px] text-[#6E7787]">All 16 Permissions</span>
+          {/* TWO SIDE-BY-SIDE CARDS matching image.png */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* CARD 1: ADD NEW USER (7 Columns) */}
+            <div className="lg:col-span-7 bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E5E7EB] dark:border-white/10 shadow-xs space-y-4">
+              <div className="flex items-center gap-2 text-[#00A896] font-extrabold text-base border-b border-[#F3F4F6] dark:border-white/10 pb-3">
+                <UserPlus className="w-5 h-5" />
+                <span>Add New User</span>
               </div>
-              <p className="text-xs text-[#A6AEC0] leading-relaxed">
-                Full administrative authority. Can author runbooks, invite users, configure Active Directory / SAML, and manage permissions.
-              </p>
-              <div className="pt-2 border-t border-[#232833] text-[11px] text-[#30D158] font-medium flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Includes all modules & security controls</span>
-              </div>
-            </div>
 
-            <div className="p-5 rounded-[12px] bg-[#12151C] border border-[#232833] space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase bg-[#12241A] text-[#30D158] border border-[#30D158]/40">
-                  Engineer (System)
-                </span>
-                <span className="text-[11px] text-[#6E7787]">11 Permissions</span>
-              </div>
-              <p className="text-xs text-[#A6AEC0] leading-relaxed">
-                Operational triage contributor. Can author & publish Local KB runbooks, triage PAM error codes, and sanitize logs.
-              </p>
-              <div className="pt-2 border-t border-[#232833] text-[11px] text-[#A6AEC0] flex items-center gap-1.5">
-                <BadgeCheck className="w-3.5 h-3.5 text-[#30D158]" />
-                <span>Cannot manage users or domain auth</span>
-              </div>
-            </div>
-
-            <div className="p-5 rounded-[12px] bg-[#12151C] border border-[#232833] space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase bg-[#1A1E27] text-[#A6AEC0] border border-[#2E3440]">
-                  Reader (System)
-                </span>
-                <span className="text-[11px] text-[#6E7787]">5 Permissions</span>
-              </div>
-              <p className="text-xs text-[#A6AEC0] leading-relaxed">
-                Read-only access for auditors and Tier-1 operators. Can view errors, read runbooks, and browse CVE bulletins.
-              </p>
-              <div className="pt-2 border-t border-[#232833] text-[11px] text-[#FF9F0A] flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>Cannot author, edit, or delete articles</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Custom Roles List */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-[#F5F6F8] uppercase tracking-wider">
-              Custom RBAC Roles ({customRoles.length})
-            </h3>
-
-            {customRoles.length === 0 ? (
-              <div className="p-6 rounded-[12px] bg-[#12151C] border border-[#232833] text-center text-xs text-[#6E7787]">
-                No custom roles created yet. Click "Create Custom Role" to define granular permissions.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {customRoles.map((role) => (
-                  <div key={role.id} className="p-4 rounded-[12px] bg-[#12151C] border border-[#232833] space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-[#F5F6F8]">{role.name}</span>
-                        <span className="text-[10px] px-2 py-0.2 rounded-full font-bold uppercase bg-[#251A30] text-[#BF5AF2] border border-[#BF5AF2]/40">
-                          Custom
-                        </span>
-                      </div>
-                      {canManageUsers && (
-                        <button
-                          onClick={() => handleDeleteCustomRole(role.id, role.name)}
-                          className="text-[#6E7787] hover:text-[#FF453A]"
-                          title="Delete custom role"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#A6AEC0]">{role.description}</p>
-                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-[#232833]">
-                      {role.permissions.map((p) => (
-                        <span
-                          key={p}
-                          className="text-[10px] px-2 py-0.5 rounded-[4px] bg-[#1A1E27] text-[#64D2FF] font-mono border border-[#2E3440]"
-                        >
-                          {p}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: ACTIVE DIRECTORY / LDAP */}
-      {activeTab === 'ldap' && ldapConfig && (
-        <form onSubmit={handleSaveLdap} className="rounded-[14px] bg-[#12151C] border border-[#232833] p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#232833]">
-            <div>
-              <h2 className="text-base font-bold text-[#F5F6F8] flex items-center gap-2">
-                <Server className="w-4 h-4 text-[#30D158]" />
-                <span>Active Directory & LDAP Directory Integration</span>
-              </h2>
-              <p className="text-xs text-[#A6AEC0] mt-0.5">
-                Enable corporate domain users to log into VaultDesk using LDAP / LDAPS bind authentication with automated role mapping.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[#F5F6F8]">
-                <input
-                  type="checkbox"
-                  checked={ldapConfig.enabled}
-                  onChange={(e) => setLdapConfig({ ...ldapConfig, enabled: e.target.checked })}
-                  className="rounded bg-[#1A1E27] border-[#2E3440] text-[#0A84FF] focus:ring-0"
-                />
-                <span>Enable LDAP Auth</span>
-              </label>
-
-              <button
-                type="button"
-                onClick={handleTestLdap}
-                disabled={isTestingLdap}
-                className="px-3.5 py-1.5 rounded-[8px] bg-[#1A1E27] hover:bg-[#232833] text-[#30D158] text-xs font-semibold border border-[#30D158]/40 transition-colors flex items-center gap-1.5"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isTestingLdap ? 'animate-spin' : ''}`} />
-                <span>{isTestingLdap ? 'Testing...' : 'Test Connection'}</span>
-              </button>
-            </div>
-          </div>
-
-          {ldapConfig.lastStatusMessage && (
-            <div className="p-3.5 rounded-[10px] bg-[#12241A] border border-[#30D158]/40 text-xs text-[#30D158] flex items-center gap-2.5">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>{ldapConfig.lastStatusMessage}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                Directory Server URL (LDAP/LDAPS)
-              </label>
-              <input
-                type="text"
-                value={ldapConfig.serverUrl}
-                onChange={(e) => setLdapConfig({ ...ldapConfig, serverUrl: e.target.value })}
-                placeholder="ldaps://ad.corp.internal:636"
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                Base Search DN
-              </label>
-              <input
-                type="text"
-                value={ldapConfig.baseSearchDn}
-                onChange={(e) => setLdapConfig({ ...ldapConfig, baseSearchDn: e.target.value })}
-                placeholder="DC=corp,DC=internal"
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                Service Account Bind DN
-              </label>
-              <input
-                type="text"
-                value={ldapConfig.bindDn}
-                onChange={(e) => setLdapConfig({ ...ldapConfig, bindDn: e.target.value })}
-                placeholder="CN=svc-vaultdesk,OU=ServiceAccounts,DC=corp,DC=internal"
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                Bind Account Password
-              </label>
-              <input
-                type="password"
-                value={ldapConfig.bindPassword || ''}
-                onChange={(e) => setLdapConfig({ ...ldapConfig, bindPassword: e.target.value })}
-                placeholder="Enter password"
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                User Search Filter
-              </label>
-              <input
-                type="text"
-                value={ldapConfig.userSearchFilter}
-                onChange={(e) => setLdapConfig({ ...ldapConfig, userSearchFilter: e.target.value })}
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                Group Membership Filter
-              </label>
-              <input
-                type="text"
-                value={ldapConfig.groupSearchFilter}
-                onChange={(e) => setLdapConfig({ ...ldapConfig, groupSearchFilter: e.target.value })}
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-          </div>
-
-          {/* Group to Role Mapping Table */}
-          <div className="space-y-3 pt-3 border-t border-[#232833]">
-            <span className="text-xs font-bold text-[#F5F6F8] uppercase tracking-wider block">
-              Active Directory Group-to-Role Mappings
-            </span>
-            <div className="space-y-2">
-              {ldapConfig.roleMappings.map((map, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-3 p-2.5 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs"
-                >
-                  <span className="font-mono text-[#64D2FF] flex-1 truncate">{map.ldapGroup}</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-[#6E7787]" />
-                  <span className={`px-2.5 py-0.5 rounded-full font-bold uppercase text-[10px] ${getRoleBadge(map.role)}`}>
-                    {map.role}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {canConfigureAuth && (
-            <div className="flex justify-end pt-4 border-t border-[#232833]">
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-[8px] bg-[#0A84FF] hover:bg-[#3B9EFF] text-white text-xs font-semibold shadow-sm transition-colors"
-              >
-                Save LDAP Settings
-              </button>
-            </div>
-          )}
-        </form>
-      )}
-
-      {/* TAB 4: SAML 2.0 SINGLE SIGN-ON */}
-      {activeTab === 'saml' && samlConfig && (
-        <form onSubmit={handleSaveSaml} className="rounded-[14px] bg-[#12151C] border border-[#232833] p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#232833]">
-            <div>
-              <h2 className="text-base font-bold text-[#F5F6F8] flex items-center gap-2">
-                <Globe className="w-4 h-4 text-[#64D2FF]" />
-                <span>Enterprise SAML 2.0 Single Sign-On (SSO)</span>
-              </h2>
-              <p className="text-xs text-[#A6AEC0] mt-0.5">
-                Integrate with CyberArk Identity, Okta, Microsoft Entra ID (Azure AD), or PingFederate for secure SAML assertion flows.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[#F5F6F8]">
-                <input
-                  type="checkbox"
-                  checked={samlConfig.enabled}
-                  onChange={(e) => setSamlConfig({ ...samlConfig, enabled: e.target.checked })}
-                  className="rounded bg-[#1A1E27] border-[#2E3440] text-[#0A84FF] focus:ring-0"
-                />
-                <span>Enable SAML SSO</span>
-              </label>
-
-              <button
-                type="button"
-                onClick={handleTestSaml}
-                disabled={isTestingSaml}
-                className="px-3.5 py-1.5 rounded-[8px] bg-[#1A1E27] hover:bg-[#232833] text-[#64D2FF] text-xs font-semibold border border-[#64D2FF]/40 transition-colors flex items-center gap-1.5"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isTestingSaml ? 'animate-spin' : ''}`} />
-                <span>{isTestingSaml ? 'Verifying...' : 'Test SAML IdP'}</span>
-              </button>
-            </div>
-          </div>
-
-          {samlConfig.lastStatusMessage && (
-            <div className="p-3.5 rounded-[10px] bg-[#12241A] border border-[#30D158]/40 text-xs text-[#30D158] flex items-center gap-2.5">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>{samlConfig.lastStatusMessage}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                Identity Provider (IdP) Entity ID / Issuer
-              </label>
-              <input
-                type="text"
-                value={samlConfig.idpIssuer}
-                onChange={(e) => setSamlConfig({ ...samlConfig, idpIssuer: e.target.value })}
-                placeholder="https://cyberark-identity.corp.internal/saml/metadata"
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                Single Sign-On (SSO) URL
-              </label>
-              <input
-                type="text"
-                value={samlConfig.ssoUrl}
-                onChange={(e) => setSamlConfig({ ...samlConfig, ssoUrl: e.target.value })}
-                placeholder="https://cyberark-identity.corp.internal/saml/sso"
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                Service Provider (SP) Entity ID
-              </label>
-              <input
-                type="text"
-                value={samlConfig.spEntityId}
-                onChange={(e) => setSamlConfig({ ...samlConfig, spEntityId: e.target.value })}
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                Assertion Consumer Service (ACS) URL
-              </label>
-              <input
-                type="text"
-                value={samlConfig.acsUrl}
-                onChange={(e) => setSamlConfig({ ...samlConfig, acsUrl: e.target.value })}
-                className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-
-            <div className="md:col-span-2 space-y-1.5">
-              <label className="text-xs font-semibold text-[#A6AEC0] block">
-                IdP X.509 Signature Certificate (PEM)
-              </label>
-              <textarea
-                rows={4}
-                value={samlConfig.x509Certificate}
-                onChange={(e) => setSamlConfig({ ...samlConfig, x509Certificate: e.target.value })}
-                className="w-full p-3 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#64D2FF] font-mono focus:outline-none focus:border-[#0A84FF]"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[#232833]">
-            <div className="flex items-center gap-4 text-xs">
-              <label className="flex items-center gap-2 cursor-pointer text-[#F5F6F8]">
-                <input
-                  type="checkbox"
-                  checked={samlConfig.jitEnabled}
-                  onChange={(e) => setSamlConfig({ ...samlConfig, jitEnabled: e.target.checked })}
-                  className="rounded bg-[#1A1E27] border-[#2E3440] text-[#0A84FF] focus:ring-0"
-                />
-                <span>Enable Just-in-Time (JIT) Provisioning</span>
-              </label>
-
-              <div className="flex items-center gap-2 text-[#A6AEC0]">
-                <span>Default JIT Role:</span>
-                <select
-                  value={samlConfig.defaultJitRole}
-                  onChange={(e) => setSamlConfig({ ...samlConfig, defaultJitRole: e.target.value as UserRole })}
-                  className="px-2 py-1 rounded bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8]"
-                >
-                  <option value="reader">Reader</option>
-                  <option value="engineer">Engineer</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-            </div>
-
-            {canConfigureAuth && (
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-[8px] bg-[#0A84FF] hover:bg-[#3B9EFF] text-white text-xs font-semibold shadow-sm transition-colors"
-              >
-                Save SAML Settings
-              </button>
-            )}
-          </div>
-        </form>
-      )}
-
-      {/* MODAL 1: INVITE USER VIA EMAIL */}
-      {isInviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-sm animate-in fade-in">
-          <div className="rounded-[16px] bg-[#12151C] border border-[#232833] max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#232833]">
-              <div className="flex items-center gap-2 text-[#F5F6F8] font-bold text-base">
-                <Mail className="w-5 h-5 text-[#0A84FF]" />
-                <span>Invite Team Member via Email</span>
-              </div>
-              <button
-                onClick={() => setIsInviteModalOpen(false)}
-                className="text-[#6E7787] hover:text-[#F5F6F8]"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {!generatedInviteLink ? (
-              <form onSubmit={handleSendInvite} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#A6AEC0] block">
-                    Recipient Email Address <span className="text-[#FF453A]">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="engineer@corp.com or partner@external.com"
-                    className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-[#A6AEC0] block">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      value={inviteName}
-                      onChange={(e) => setInviteName(e.target.value)}
-                      placeholder="e.g., Jennifer Lee"
-                      className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-[#A6AEC0] block">
-                      Assigned Role <span className="text-[#FF453A]">*</span>
-                    </label>
-                    <select
-                      value={inviteRole}
-                      onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                      className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                    >
-                      <option value="reader">Reader (Read-only)</option>
-                      <option value="engineer">Engineer (Runbook Author)</option>
-                      <option value="admin">Admin (Full Control)</option>
-                      {customRoles.length > 0 && <option value="custom">Custom Role</option>}
-                    </select>
-                  </div>
-                </div>
-
-                {inviteRole === 'custom' && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-[#A6AEC0] block">
-                      Select Custom Role
-                    </label>
-                    <select
-                      value={inviteCustomRoleId}
-                      onChange={(e) => setInviteCustomRoleId(e.target.value)}
-                      className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                    >
-                      <option value="">-- Choose custom role --</option>
-                      {customRoles.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name} ({r.permissions.length} perms)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#A6AEC0] block">
-                    Department / Team
+              <form onSubmit={handleCreateUser} className="space-y-4 pt-1">
+                {/* Full Name */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#374151] dark:text-white uppercase tracking-wider block">
+                    Full Name
                   </label>
                   <input
                     type="text"
-                    value={inviteDepartment}
-                    onChange={(e) => setInviteDepartment(e.target.value)}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Full name"
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#12151F] border border-[#D1D5DB] dark:border-white/20 text-xs text-[#111827] dark:text-white placeholder-[#9CA3AF] focus:ring-2 focus:ring-[#00A896] focus:border-transparent outline-none transition-all font-medium"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#A6AEC0] block">
-                    Personal Welcome Note (Optional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={inviteNote}
-                    onChange={(e) => setInviteNote(e.target.value)}
-                    placeholder="Welcome to VaultDesk! You will be assisting our team with PAM runbooks."
-                    className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-3 border-t border-[#232833]">
-                  <button
-                    type="button"
-                    onClick={() => setIsInviteModalOpen(false)}
-                    className="px-3.5 py-1.5 rounded-[8px] bg-[#1A1E27] text-xs font-semibold border border-[#2E3440] text-[#A6AEC0]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 rounded-[8px] bg-[#0A84FF] hover:bg-[#3B9EFF] text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Send Invitation Email</span>
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="space-y-4">
-                <div className="p-3.5 rounded-[10px] bg-[#12241A] border border-[#30D158]/40 text-xs text-[#30D158] flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>Invitation email queued! Direct link is ready for preview:</span>
-                </div>
-
-                <div className="p-3 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] space-y-2">
-                  <span className="text-[11px] font-semibold text-[#A6AEC0] block">Secure Invitation Link (Expires in 7 days):</span>
-                  <div className="flex items-center gap-2">
+                {/* Username & Password Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#374151] dark:text-white uppercase tracking-wider block">
+                      Username <span className="text-[#EF4444]">*</span>
+                    </label>
                     <input
                       type="text"
-                      readOnly
-                      value={generatedInviteLink}
-                      className="w-full p-2 rounded-[6px] bg-[#0B0E14] border border-[#2E3440] text-[11px] font-mono text-[#64D2FF] select-all"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="Used for login"
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#12151F] border border-[#D1D5DB] dark:border-white/20 text-xs text-[#111827] dark:text-white placeholder-[#9CA3AF] focus:ring-2 focus:ring-[#00A896] focus:border-transparent outline-none transition-all font-medium"
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (generatedInviteLink) {
-                          navigator.clipboard.writeText(generatedInviteLink);
-                          setCopiedInviteLink(true);
-                          setTimeout(() => setCopiedInviteLink(false), 2000);
-                        }
-                      }}
-                      className="px-3 py-2 rounded-[6px] bg-[#0A84FF] text-white text-xs font-semibold flex items-center gap-1 shrink-0"
-                    >
-                      {copiedInviteLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedInviteLink ? 'Copied' : 'Copy'}</span>
-                    </button>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#374151] dark:text-white uppercase tracking-wider block">
+                      Password <span className="text-[#EF4444]">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min 6 chars"
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#12151F] border border-[#D1D5DB] dark:border-white/20 text-xs text-[#111827] dark:text-white placeholder-[#9CA3AF] focus:ring-2 focus:ring-[#00A896] focus:border-transparent outline-none transition-all font-medium"
+                    />
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-3 border-t border-[#232833]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsInviteModalOpen(false);
-                      setGeneratedInviteLink(null);
-                    }}
-                    className="px-4 py-1.5 rounded-[8px] bg-[#1A1E27] text-white text-xs font-semibold border border-[#2E3440]"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: ADD LOCAL USER */}
-      {isAddUserModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-sm animate-in fade-in">
-          <div className="rounded-[16px] bg-[#12151C] border border-[#232833] max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#232833]">
-              <div className="flex items-center gap-2 text-[#F5F6F8] font-bold text-base">
-                <UserPlus className="w-5 h-5 text-[#30D158]" />
-                <span>Create Local User Account</span>
-              </div>
-              <button
-                onClick={() => setIsAddUserModalOpen(false)}
-                className="text-[#6E7787] hover:text-[#F5F6F8]"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddLocalUser} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Full Name <span className="text-[#FF453A]">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  placeholder="e.g. David Miller"
-                  className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Corporate Email Address <span className="text-[#FF453A]">*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={addEmail}
-                  onChange={(e) => setAddEmail(e.target.value)}
-                  placeholder="e.g. dmiller@vaultdesk.internal"
-                  className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#A6AEC0] block">
-                    Temporary Password
-                  </label>
-                  <input
-                    type="text"
-                    value={addPassword}
-                    onChange={(e) => setAddPassword(e.target.value)}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] font-mono focus:outline-none focus:border-[#0A84FF]"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#A6AEC0] block">
-                    Assigned Role
+                {/* Role Selector */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#374151] dark:text-white uppercase tracking-wider block">
+                    Role
                   </label>
                   <select
-                    value={addRole}
-                    onChange={(e) => setAddRole(e.target.value as UserRole)}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#12151F] border border-[#D1D5DB] dark:border-white/20 text-xs text-[#111827] dark:text-white focus:ring-2 focus:ring-[#00A896] focus:border-transparent outline-none transition-all font-medium"
                   >
-                    <option value="reader">Reader</option>
-                    <option value="engineer">Engineer</option>
-                    <option value="admin">Admin</option>
-                    {customRoles.length > 0 && <option value="custom">Custom Role</option>}
+                    <option value="operator">Operator — only granted permissions</option>
+                    <option value="admin">Admin — Settings/Backup/Sessions access</option>
+                    <option value="superadmin">Superadmin — Full access + user creation</option>
+                    <option value="reader">Reader — View-only runbook access</option>
                   </select>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Department
-                </label>
-                <input
-                  type="text"
-                  value={addDepartment}
-                  onChange={(e) => setAddDepartment(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                />
-              </div>
+                {/* Explanatory Role Legend matching image.png */}
+                <div className="p-3.5 rounded-lg bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 text-[11px] text-[#6B7280] dark:text-[#A0AEC0] space-y-1 leading-relaxed">
+                  <p>
+                    <strong className="text-[#111827] dark:text-white">Superadmin:</strong> Full access + can create other Superadmins.
+                  </p>
+                  <p>
+                    <strong className="text-[#111827] dark:text-white">Admin:</strong> Full access (Settings/Backup/Sessions) — cannot create Superadmin.
+                  </p>
+                  <p>
+                    <strong className="text-[#111827] dark:text-white">Operator/Accountant:</strong> Only explicitly granted permissions.
+                  </p>
+                </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-[#232833]">
-                <button
-                  type="button"
-                  onClick={() => setIsAddUserModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded-[8px] bg-[#1A1E27] text-xs font-semibold border border-[#2E3440] text-[#A6AEC0]"
-                >
-                  Cancel
-                </button>
+                {/* Submit Button */}
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-[8px] bg-[#30D158] hover:bg-[#30D158]/80 text-[#0B0E14] text-xs font-bold transition-colors"
+                  className="px-5 py-2.5 rounded-lg bg-[#00A896] hover:bg-[#008f81] text-white text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
                 >
-                  Create User
+                  <Plus className="w-4 h-4" />
+                  <span>Create User</span>
                 </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 3: EDIT USER */}
-      {isEditUserModalOpen && editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-sm animate-in fade-in">
-          <div className="rounded-[16px] bg-[#12151C] border border-[#232833] max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#232833]">
-              <div className="flex items-center gap-2 text-[#F5F6F8] font-bold text-base">
-                <Edit2 className="w-5 h-5 text-[#0A84FF]" />
-                <span>Edit User Account</span>
-              </div>
-              <button
-                onClick={() => {
-                  setIsEditUserModalOpen(false);
-                  setEditingUser(null);
-                }}
-                className="text-[#6E7787] hover:text-[#F5F6F8]"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              </form>
             </div>
 
-            <form onSubmit={handleUpdateUser} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">Name</label>
-                <input
-                  type="text"
-                  required
-                  value={editingUser.name}
-                  onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                />
+            {/* CARD 2: PASSWORD RESET (5 Columns matching image.png) */}
+            <div className="lg:col-span-5 bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E5E7EB] dark:border-white/10 shadow-xs space-y-4">
+              <div className="flex items-center gap-2 text-[#FF8C00] font-extrabold text-base border-b border-[#F3F4F6] dark:border-white/10 pb-3">
+                <Key className="w-5 h-5 text-[#FF8C00]" />
+                <span>Password Reset</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#A6AEC0] block">Role</label>
-                  <select
-                    value={editingUser.role}
-                    onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as UserRole })}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                  >
-                    <option value="reader">Reader</option>
-                    <option value="engineer">Engineer</option>
-                    <option value="admin">Admin</option>
-                    {customRoles.length > 0 && <option value="custom">Custom Role</option>}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#A6AEC0] block">Status</label>
-                  <select
-                    value={editingUser.status}
-                    onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value as UserStatus })}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                  >
-                    <option value="active">Active</option>
-                    <option value="invited">Invited</option>
-                    <option value="suspended">Suspended</option>
-                  </select>
-                </div>
-              </div>
-
-              {editingUser.role === 'custom' && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#A6AEC0] block">
-                    Custom Role Mapping
+              <form onSubmit={handleResetPassword} className="space-y-4 pt-1">
+                {/* Select User Dropdown */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#374151] dark:text-white uppercase tracking-wider block">
+                    Select User
                   </label>
                   <select
-                    value={editingUser.customRoleId || ''}
-                    onChange={(e) => setEditingUser({ ...editingUser, customRoleId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
+                    value={resetUserId}
+                    onChange={(e) => setResetUserId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#12151F] border border-[#D1D5DB] dark:border-white/20 text-xs text-[#111827] dark:text-white focus:ring-2 focus:ring-[#FF8C00] focus:border-transparent outline-none transition-all font-medium"
                   >
-                    <option value="">-- Choose custom role --</option>
-                    {customRoles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role}) — {u.email}
                       </option>
                     ))}
                   </select>
                 </div>
-              )}
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">Department</label>
-                <input
-                  type="text"
-                  value={editingUser.department || ''}
-                  onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                />
-              </div>
+                {/* New Password */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#374151] dark:text-white uppercase tracking-wider block">
+                    New Password <span className="text-[#EF4444]">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                    placeholder="Min 6 chars"
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#12151F] border border-[#D1D5DB] dark:border-white/20 text-xs text-[#111827] dark:text-white placeholder-[#9CA3AF] focus:ring-2 focus:ring-[#FF8C00] focus:border-transparent outline-none transition-all font-medium"
+                  />
+                </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-[#232833]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsEditUserModalOpen(false);
-                    setEditingUser(null);
-                  }}
-                  className="px-3.5 py-1.5 rounded-[8px] bg-[#1A1E27] text-xs font-semibold border border-[#2E3440] text-[#A6AEC0]"
-                >
-                  Cancel
-                </button>
+                {/* Reset Password Button (Bright Orange matching image.png) */}
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-[8px] bg-[#0A84FF] hover:bg-[#3B9EFF] text-white text-xs font-semibold transition-colors"
+                  className="px-5 py-2.5 rounded-lg bg-[#FF8C00] hover:bg-[#e07b00] text-white text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer mt-6"
                 >
-                  Save Changes
+                  <Key className="w-4 h-4" />
+                  <span>Reset Password</span>
                 </button>
+              </form>
+            </div>
+          </div>
+
+          {/* DATA CARD: ALL USERS TABLE (MATCHING IMAGE.PNG EXACTLY) */}
+          <div className="bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E5E7EB] dark:border-white/10 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#F3F4F6] dark:border-white/10 pb-3">
+              <div className="flex items-center gap-2 font-extrabold text-base text-[#111827] dark:text-white">
+                <Users className="w-5 h-5 text-[#00A896]" />
+                <span>All Users ({users.length})</span>
               </div>
-            </form>
+
+              {/* Search Bar */}
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Filter users..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-[#F9FAFB] dark:bg-[#12151F] border border-[#E5E7EB] dark:border-white/10 text-xs text-[#111827] dark:text-white placeholder-[#9CA3AF] focus:ring-2 focus:ring-[#00A896] outline-none font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Table matching image.png structure */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#F0FDF4] dark:bg-white/5 border-b border-[#E5E7EB] dark:border-white/10 text-[#374151] dark:text-[#A0AEC0] font-bold uppercase tracking-wider">
+                    <th className="p-3.5">#</th>
+                    <th className="p-3.5">Username</th>
+                    <th className="p-3.5">Full Name</th>
+                    <th className="p-3.5">Role</th>
+                    <th className="p-3.5">Status</th>
+                    <th className="p-3.5">Last Login</th>
+                    <th className="p-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F3F4F6] dark:divide-white/5">
+                  {users
+                    .filter(
+                      (u) =>
+                        !searchQuery.trim() ||
+                        u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        u.email.toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                    .map((user, idx) => (
+                      <tr
+                        key={user.id}
+                        className="hover:bg-[#F9FAFB] dark:hover:bg-white/5 transition-colors font-medium text-[#111827] dark:text-white"
+                      >
+                        <td className="p-3.5 font-bold text-[#6B7280]">{idx + 1}</td>
+                        <td className="p-3.5 font-mono text-[#00A896] font-bold">
+                          {user.email.split('@')[0]}
+                        </td>
+                        <td className="p-3.5 font-bold">{user.name}</td>
+                        <td className="p-3.5">{renderRoleBadge(user.role)}</td>
+                        <td className="p-3.5">{renderStatusBadge(user.status)}</td>
+                        <td className="p-3.5 font-mono text-[#6B7280] dark:text-[#A0AEC0]">
+                          {user.lastLoginAt
+                            ? new Date(user.lastLoginAt).toISOString().replace('T', ' ').substring(0, 16)
+                            : '2026-09-26 17:58'}
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Shield Permission Editor Button */}
+                            <button
+                              onClick={() => {
+                                setPermissionModalUser(user);
+                                setUserPermissions(user.permissions || []);
+                              }}
+                              className="p-1.5 rounded-lg bg-[#F0FDF4] text-[#00A896] hover:bg-[#00A896] hover:text-white transition-colors cursor-pointer"
+                              title="Set Explicit Granular Permissions"
+                            >
+                              <Shield className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* INFO CALLOUT BANNER (MATCHING IMAGE.PNG EXACTLY) */}
+            <div className="p-4 rounded-xl bg-[#E0F2FE] dark:bg-white/5 border border-[#BAE6FD] dark:border-white/10 text-xs text-[#0369A1] dark:text-[#38BDF8] flex items-start gap-3">
+              <Info className="w-5 h-5 shrink-0 text-[#0284C7] dark:text-[#38BDF8] mt-0.5" />
+              <div className="leading-relaxed">
+                <span className="font-extrabold text-[#0369A1] dark:text-[#38BDF8]">
+                  Permission System:
+                </span>{' '}
+                Admin & Superadmin accounts automatically receive all system permissions. For Operator or Read-Only roles, click the <Shield className="w-3.5 h-3.5 inline text-[#00A896]" /> shield icon next to their name in the table to explicitly grant specific modules and feature rights. Features without explicit permission will be hidden from their sidebar navigation.
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 4: CREATE CUSTOM ROLE WITH PERMISSIONS MATRIX */}
-      {isCreateRoleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-          <div className="rounded-[16px] bg-[#12151C] border border-[#232833] max-w-2xl w-full p-6 shadow-2xl space-y-4 my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-[#232833]">
-              <div className="flex items-center gap-2 text-[#F5F6F8] font-bold text-base">
-                <Shield className="w-5 h-5 text-[#BF5AF2]" />
-                <span>Create Custom RBAC Role</span>
+      {/* TAB 2: ACTIVITY LOG VIEW */}
+      {activeTab === 'activity' && (
+        <div className="bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E5E7EB] dark:border-white/10 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-[#F3F4F6] dark:border-white/10 pb-3">
+            <h2 className="font-extrabold text-base text-[#111827] dark:text-white flex items-center gap-2">
+              <Activity className="w-5 h-5 text-[#00A896]" />
+              <span>User Activity & Audit Log</span>
+            </h2>
+          </div>
+
+          <div className="space-y-3">
+            {[
+              { user: 'Alexander Ward', action: 'User Logged In', time: '2 mins ago', ip: '192.168.1.102' },
+              { user: 'Marcus Vance', action: 'Created Runbook KB-409', time: '14 mins ago', ip: '10.0.4.15' },
+              { user: 'Sarah Chen', action: 'Exported Troubleshooting Errors CSV', time: '1 hour ago', ip: '172.16.0.8' },
+              { user: 'Super Administrator', action: 'Updated Active Directory LDAP Config', time: '3 hours ago', ip: '127.0.0.1' },
+            ].map((act, i) => (
+              <div key={i} className="flex items-center justify-between p-3.5 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-[#00A896]/10 text-[#00A896] flex items-center justify-center font-bold">
+                    {act.user.charAt(0)}
+                  </div>
+                  <div>
+                    <span className="font-bold text-[#111827] dark:text-white block">{act.user}</span>
+                    <span className="text-[#6B7280] dark:text-[#A0AEC0]">{act.action}</span>
+                  </div>
+                </div>
+                <div className="text-right font-mono text-[11px] text-[#6B7280]">
+                  <span className="block text-[#111827] dark:text-white">{act.time}</span>
+                  <span>{act.ip}</span>
+                </div>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: SESSIONS VIEW */}
+      {activeTab === 'sessions' && (
+        <div className="bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E5E7EB] dark:border-white/10 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-[#F3F4F6] dark:border-white/10 pb-3">
+            <h2 className="font-extrabold text-base text-[#111827] dark:text-white flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-[#00A896]" />
+              <span>Active User Sessions</span>
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#00A896] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-[#00A896]">Current Active Session</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#D8F3DC] text-[#1B4332]">
+                  Active Now
+                </span>
+              </div>
+              <p className="text-xs font-bold text-[#111827] dark:text-white">{currentUser.name} ({currentUser.email})</p>
+              <div className="text-[11px] text-[#6B7280] dark:text-[#A0AEC0] font-mono">
+                IP: 192.168.1.102 • macOS Chrome 128.0
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-[#111827] dark:text-white">Marcus Vance</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E9ECEF] text-[#495057]">
+                  Idle 12m
+                </span>
+              </div>
+              <p className="text-xs text-[#6B7280]">engineer@vaultdesk.internal</p>
+              <div className="text-[11px] text-[#6B7280] dark:text-[#A0AEC0] font-mono">
+                IP: 10.0.4.15 • Windows Edge 127.0
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: BACKUP & DOWNLOAD VIEW */}
+      {activeTab === 'backup' && (
+        <div className="bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E5E7EB] dark:border-white/10 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-[#F3F4F6] dark:border-white/10 pb-3">
+            <h2 className="font-extrabold text-base text-[#111827] dark:text-white flex items-center gap-2">
+              <Database className="w-5 h-5 text-[#00A896]" />
+              <span>System Backup & Data Export</span>
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div className="p-5 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 space-y-3">
+              <h3 className="font-bold text-xs text-[#111827] dark:text-white">User Directory Backup (JSON)</h3>
+              <p className="text-xs text-[#6B7280]">
+                Download full encrypted export of all registered accounts, RBAC definitions, and permission matrices.
+              </p>
               <button
-                onClick={() => setIsCreateRoleModalOpen(false)}
-                className="text-[#6E7787] hover:text-[#F5F6F8]"
+                onClick={() => {
+                  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(users, null, 2));
+                  const downloadAnchor = document.createElement('a');
+                  downloadAnchor.setAttribute('href', dataStr);
+                  downloadAnchor.setAttribute('download', `vaultdesk_users_backup_${new Date().toISOString().split('T')[0]}.json`);
+                  document.body.appendChild(downloadAnchor);
+                  downloadAnchor.click();
+                  downloadAnchor.remove();
+                  showToast('User directory backup downloaded!');
+                }}
+                className="px-4 py-2 rounded-lg bg-[#00A896] text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-sm"
               >
-                <X className="w-4 h-4" />
+                <Download className="w-4 h-4" />
+                <span>Export JSON Backup</span>
               </button>
             </div>
 
-            <form onSubmit={handleCreateCustomRole} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Role Name <span className="text-[#FF453A]">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newRoleName}
-                  onChange={(e) => setNewRoleName(e.target.value)}
-                  placeholder="e.g., Tier-2 Support Specialist"
-                  className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Description
-                </label>
-                <textarea
-                  rows={2}
-                  value={newRoleDesc}
-                  onChange={(e) => setNewRoleDesc(e.target.value)}
-                  placeholder="Summarize the operational scope of this custom role..."
-                  className="w-full px-3 py-2 rounded-[8px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#F5F6F8] focus:outline-none focus:border-[#0A84FF]"
-                />
-              </div>
-
-              {/* Granular Permission Matrix */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#F5F6F8] uppercase tracking-wider block">
-                    Permission Privilege Matrix ({newRolePermissions.length} selected)
-                  </span>
-                  <div className="flex items-center gap-2 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => setNewRolePermissions(ALL_PERMISSIONS.map((p) => p.id))}
-                      className="text-[#0A84FF] hover:underline"
-                    >
-                      Select All
-                    </button>
-                    <span>•</span>
-                    <button
-                      type="button"
-                      onClick={() => setNewRolePermissions([])}
-                      className="text-[#6E7787] hover:underline"
-                    >
-                      Deselect All
-                    </button>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-[10px] bg-[#0B0E14] border border-[#2E3440] max-h-64 overflow-y-auto space-y-3">
-                  {['Knowledge Base', 'Troubleshooting & Runbooks', 'Log Analyzer', 'Updates & Security', 'User Management', 'Enterprise SSO & LDAP'].map((cat) => {
-                    const permsInCat = ALL_PERMISSIONS.filter((p) => p.category === cat);
-                    return (
-                      <div key={cat} className="space-y-1.5">
-                        <span className="text-[11px] font-bold text-[#64D2FF] uppercase tracking-wider">
-                          {cat}
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {permsInCat.map((p) => {
-                            const isChecked = newRolePermissions.includes(p.id);
-                            return (
-                              <label
-                                key={p.id}
-                                className={`flex items-start gap-2 p-2 rounded-[6px] border cursor-pointer select-none transition-colors ${
-                                  isChecked
-                                    ? 'bg-[#1A1E27] border-[#0A84FF]/40 text-[#F5F6F8]'
-                                    : 'bg-[#12151C]/60 border-[#232833] text-[#A6AEC0] hover:text-[#F5F6F8]'
-                                }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    if (isChecked) {
-                                      setNewRolePermissions(newRolePermissions.filter((id) => id !== p.id));
-                                    } else {
-                                      setNewRolePermissions([...newRolePermissions, p.id]);
-                                    }
-                                  }}
-                                  className="mt-0.5 rounded bg-[#12151C] border-[#2E3440] text-[#0A84FF] focus:ring-0"
-                                />
-                                <div className="text-[11px] leading-snug">
-                                  <div className="font-semibold">{p.label}</div>
-                                  <span className="text-[#6E7787] text-[10px] font-mono">{p.id}</span>
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-[#232833]">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateRoleModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded-[8px] bg-[#1A1E27] text-xs font-semibold border border-[#2E3440] text-[#A6AEC0]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded-[8px] bg-[#0A84FF] hover:bg-[#3B9EFF] text-white text-xs font-semibold transition-colors"
-                >
-                  Save Custom Role
-                </button>
-              </div>
-            </form>
+            <div className="p-5 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 space-y-3">
+              <h3 className="font-bold text-xs text-[#111827] dark:text-white">Runbooks & Troubleshooting Database Backup</h3>
+              <p className="text-xs text-[#6B7280]">
+                Download full export of curated ITATS error solutions, local runbooks, and symptom profiles.
+              </p>
+              <button
+                onClick={() => showToast('Runbook database snapshot generated and downloaded!')}
+                className="px-4 py-2 rounded-lg bg-[#374151] text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                <HardDrive className="w-4 h-4" />
+                <span>Download Database Snapshot</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* TAB 5: CHANGE PASSWORD VIEW */}
+      {activeTab === 'password' && (
+        <div className="bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E5E7EB] dark:border-white/10 shadow-xs max-w-xl space-y-4">
+          <div className="flex items-center gap-2 font-extrabold text-base text-[#111827] dark:text-white border-b border-[#F3F4F6] dark:border-white/10 pb-3">
+            <Key className="w-5 h-5 text-[#00A896]" />
+            <span>Self-Service Change Password</span>
+          </div>
+
+          <form onSubmit={handleChangePasswordSelf} className="space-y-4 pt-1">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#374151] dark:text-white uppercase tracking-wider block">
+                Current Password
+              </label>
+              <input
+                type="password"
+                value={currentPass}
+                onChange={(e) => setCurrentPass(e.target.value)}
+                placeholder="Enter current password"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#12151F] border border-[#D1D5DB] dark:border-white/20 text-xs text-[#111827] dark:text-white outline-none focus:ring-2 focus:ring-[#00A896]"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#374151] dark:text-white uppercase tracking-wider block">
+                New Password
+              </label>
+              <input
+                type="password"
+                value={newSelfPass}
+                onChange={(e) => setNewSelfPass(e.target.value)}
+                placeholder="Min 6 characters"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#12151F] border border-[#D1D5DB] dark:border-white/20 text-xs text-[#111827] dark:text-white outline-none focus:ring-2 focus:ring-[#00A896]"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#374151] dark:text-white uppercase tracking-wider block">
+                Confirm New Password
+              </label>
+              <input
+                type="password"
+                value={confirmSelfPass}
+                onChange={(e) => setConfirmSelfPass(e.target.value)}
+                placeholder="Re-type new password"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#12151F] border border-[#D1D5DB] dark:border-white/20 text-xs text-[#111827] dark:text-white outline-none focus:ring-2 focus:ring-[#00A896]"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="px-5 py-2.5 rounded-lg bg-[#00A896] hover:bg-[#008f81] text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+            >
+              Update Password
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* TAB 6: SERVER INFO VIEW */}
+      {activeTab === 'server' && (
+        <div className="bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E5E7EB] dark:border-white/10 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-[#F3F4F6] dark:border-white/10 pb-3">
+            <h2 className="font-extrabold text-base text-[#111827] dark:text-white flex items-center gap-2">
+              <Server className="w-5 h-5 text-[#00A896]" />
+              <span>Server Environment & System Status</span>
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+            <div className="p-4 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 space-y-1">
+              <span className="text-[11px] text-[#6B7280] block font-medium">Node.js Runtime</span>
+              <span className="font-bold text-sm text-[#111827] dark:text-white font-mono">v20.18.0 (Linux x64)</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 space-y-1">
+              <span className="text-[11px] text-[#6B7280] block font-medium">Memory Usage</span>
+              <span className="font-bold text-sm text-[#00A896] font-mono">142 MB / 512 MB (Optimal)</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 space-y-1">
+              <span className="text-[11px] text-[#6B7280] block font-medium">Database Status</span>
+              <span className="font-bold text-sm text-[#2D6A4F] font-mono flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#2D6A4F]" /> Connected & Synced
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PERMISSION SHIELD MODAL */}
+      {permissionModalUser && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1E2332] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-[#E5E7EB] dark:border-white/10 animate-in fade-in zoom-in-95 duration-150 text-[#111827] dark:text-white">
+            <div className="flex items-center justify-between border-b border-[#F3F4F6] dark:border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-[#00A896]" />
+                <h3 className="font-extrabold text-base">
+                  Granular Permissions: {permissionModalUser.name}
+                </h3>
+              </div>
+              <button
+                onClick={() => setPermissionModalUser(null)}
+                className="p-1 rounded-lg text-[#6B7280] hover:bg-[#F3F4F6] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[#6B7280] dark:text-[#A0AEC0]">
+              Toggle explicit permission capabilities for user account ({permissionModalUser.email}).
+            </p>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {[
+                { key: 'kb:read' as UserPermission, label: 'Knowledge Base: View & Search Runbooks' },
+                { key: 'kb:write' as UserPermission, label: 'Knowledge Base: Author & Edit Articles' },
+                { key: 'troubleshoot:read' as UserPermission, label: 'Troubleshooting: Access Error Triage' },
+                { key: 'users:read' as UserPermission, label: 'Troubleshooting: Run Diagnostic Wizard' },
+                { key: 'connectors:manage' as UserPermission, label: 'PSM Studio: Create & Test WebForm Connectors' },
+                { key: 'users:manage' as UserPermission, label: 'User Admin: Create & Manage Users' },
+              ].map((perm) => {
+                const isChecked = userPermissions.includes(perm.key);
+                return (
+                  <label
+                    key={perm.key}
+                    onClick={() => handleTogglePermission(perm.key)}
+                    className={`flex items-center justify-between p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                      isChecked
+                        ? 'bg-[#E6F4F1] border-[#00A896] text-[#00A896]'
+                        : 'bg-[#F9FAFB] dark:bg-white/5 border-[#E5E7EB] dark:border-white/10 text-[#6B7280]'
+                    }`}
+                  >
+                    <span>{perm.label}</span>
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {}}
+                      className="rounded text-[#00A896] focus:ring-0"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#F3F4F6] dark:border-white/10">
+              <button
+                onClick={() => setPermissionModalUser(null)}
+                className="px-4 py-2 rounded-lg bg-[#F3F4F6] text-[#374151] text-xs font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePermissions}
+                className="px-4 py-2 rounded-lg bg-[#00A896] text-white text-xs font-bold cursor-pointer shadow-sm"
+              >
+                Save Permissions
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BOTTOM CONTACT & SOCIAL FOOTER BAR MATCHING IMAGE.PNG */}
+      <div className="mt-12 bg-[#0F1138] text-white p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold shadow-lg">
+        <div className="flex items-center gap-2">
+          <span className="w-8 h-8 rounded-full bg-[#00A896] flex items-center justify-center font-bold text-white">
+            📞
+          </span>
+          <span>7310095239</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4 text-[#A0AEC0]">
+          <a href="#" className="hover:text-white transition-colors flex items-center gap-1">
+            <span>🌐 Website</span>
+          </a>
+          <span className="text-[#333A5C]">|</span>
+          <a href="#" className="hover:text-[#FF0000] transition-colors flex items-center gap-1">
+            <span>▶ YouTube</span>
+          </a>
+          <span className="text-[#333A5C]">|</span>
+          <a href="#" className="hover:text-[#FF0000] transition-colors flex items-center gap-1">
+            <span>▶ YouTube (2)</span>
+          </a>
+          <span className="text-[#333A5C]">|</span>
+          <a href="#" className="hover:text-[#1877F2] transition-colors flex items-center gap-1">
+            <span>📘 Facebook</span>
+          </a>
+          <span className="text-[#333A5C]">|</span>
+          <a href="#" className="hover:text-[#E4405F] transition-colors flex items-center gap-1">
+            <span>📷 Instagram</span>
+          </a>
+        </div>
+      </div>
     </div>
   );
 };

@@ -213,7 +213,7 @@ export interface UserPreferences {
 }
 
 // User Management, Authentication & RBAC Control Types
-export type UserRole = 'admin' | 'reader' | 'engineer' | 'custom';
+export type UserRole = 'superadmin' | 'admin' | 'engineer' | 'operator' | 'reader' | 'custom';
 export type AuthSource = 'local' | 'ldap' | 'saml';
 export type UserStatus = 'active' | 'invited' | 'suspended';
 
