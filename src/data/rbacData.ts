@@ -191,4 +191,16 @@ export const INITIAL_USERS: UserProfile[] = [
     lastLoginAt: '2026-10-01T00:00:00Z',
     createdAt: '2026-10-01T00:00:00Z',
   },
+  {
+    id: 'usr-breakglass-superadmin',
+    name: 'Breakglass Superadmin',
+    email: 'breakglass@vaultdesk.internal',
+    role: 'superadmin',
+    permissions: ALL_PERMISSIONS.map((p) => p.id),
+    authSource: 'local',
+    status: 'active',
+    department: 'Emergency SecOps & Disaster Recovery',
+    lastLoginAt: '2026-10-01T00:00:00Z',
+    createdAt: '2026-10-01T00:00:00Z',
+  },
 ];

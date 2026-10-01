@@ -370,7 +370,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenRead
           },
           body: JSON.stringify({
             email,
-            password: 'Admin#2026!',
             authMethod: 'google',
           }),
         });
@@ -487,32 +486,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenRead
               <div className="flex-1 leading-relaxed">{successMessage}</div>
             </div>
           )}
-
-          {/* Admin Gmail API / SMTP Status Banner */}
-          <div className="p-3.5 rounded-2xl bg-[#0E1017] border border-[#232833] text-xs space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${emailStatus.hasGmailOAuthToken || emailStatus.hasCustomSmtp ? 'bg-[#30D158] animate-pulse' : 'bg-[#FF9F0A]'}`}></span>
-                <span className="font-bold text-white text-xs">
-                  {emailStatus.hasGmailOAuthToken || emailStatus.hasCustomSmtp ? 'Gmail Live Email Dispatch Active' : 'Gmail Connection Needed for 1393ndsd@gmail.com'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowSmtpModal(true)}
-                className="text-[11px] text-[#0A84FF] font-semibold hover:underline cursor-pointer"
-              >
-                {emailStatus.hasCustomSmtp ? 'Edit App Password' : 'Set App Password'}
-              </button>
-            </div>
-            <p className="text-[11px] text-[#8E9BBA] leading-relaxed">
-              {emailStatus.hasGmailOAuthToken
-                ? 'OAuth Access Token registered. Approval alerts & OTP codes will be delivered directly to 1393ndsd@gmail.com via Gmail API.'
-                : emailStatus.hasCustomSmtp
-                ? `Custom Gmail SMTP active for ${emailStatus.smtpUser}. Emails are dispatched directly to real inbox.`
-                : 'To receive real approval emails & OTPs at 1393ndsd@gmail.com, click "Sign in with Google" below OR enter a Gmail App Password.'}
-            </p>
-          </div>
 
           {/* =========================================================================
               TAB 1: PASSWORD LOGIN
@@ -920,74 +893,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenRead
           Protected by VaultDesk Role-Based Access Control (RBAC) & TLS Encrypted Session Tokens.
         </div>
       </div>
-
-      {/* Gmail SMTP App Password Modal */}
-      {showSmtpModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-[#121621] border border-[#232833] rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl relative">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2 text-white font-bold text-base">
-                <Mail className="w-5 h-5 text-[#0A84FF]" />
-                <span>Configure Gmail Dispatch</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowSmtpModal(false)}
-                className="text-[#6E7787] hover:text-white p-1 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-[#8E9BBA] leading-relaxed">
-              Enter your Gmail address and a 16-character Google App Password (<span className="text-[#0A84FF]">myaccount.google.com/apppasswords</span>) for 24/7 background delivery to <strong className="text-white">1393ndsd@gmail.com</strong> without needing active browser OAuth sessions.
-            </p>
-
-            <form onSubmit={handleSaveSmtp} className="space-y-3 pt-2">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#8E9BBA]">Gmail Address</label>
-                <input
-                  type="email"
-                  value={smtpUser}
-                  onChange={(e) => setSmtpUser(e.target.value)}
-                  placeholder="1393ndsd@gmail.com"
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white text-xs focus:outline-none focus:border-[#0A84FF]"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#8E9BBA]">16-Digit Google App Password</label>
-                <input
-                  type="password"
-                  value={smtpPass}
-                  onChange={(e) => setSmtpPass(e.target.value)}
-                  placeholder="xxxx xxxx xxxx xxxx"
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white text-xs focus:outline-none focus:border-[#0A84FF]"
-                  required
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowSmtpModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-[#8E9BBA] hover:text-white cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="px-5 py-2 rounded-xl bg-[#0A84FF] hover:bg-[#0070E0] text-white font-bold text-xs shadow-md transition-all cursor-pointer"
-                >
-                  Save & Activate Gmail
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

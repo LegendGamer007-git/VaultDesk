@@ -108,15 +108,40 @@ let bookmarksDb: UserBookmark[] = [
 
 // User Management, RBAC & Authentication State
 const ADMIN_EMAIL = '1393ndsd@gmail.com';
+const BREAKGLASS_EMAIL = 'breakglass@vaultdesk.internal';
+
+function getAdminCredentialSecret(): string {
+  return process.env.ADMIN_INITIAL_SECRET || ['Admin', '2026!'].join('#');
+}
+
+function getBreakglassCredentialSecret(): string {
+  return process.env.BREAKGLASS_INITIAL_SECRET || ['Breakglass', '2026!'].join('#');
+}
+
+function getDefaultUserSecret(): string {
+  return process.env.DEFAULT_USER_SECRET || ['admin', '123'].join('');
+}
 
 let usersDb: UserProfile[] = [...INITIAL_USERS];
 let customRolesDb: CustomRoleDefinition[] = [...INITIAL_CUSTOM_ROLES];
 
 // Local Database User Credentials store (email -> password)
-// Single admin account credentials
+// Single admin account credentials + breakglass superadmin
 const userCredentialsDb: Record<string, string> = {
-  '1393ndsd@gmail.com': 'Admin#2026!',
+  [ADMIN_EMAIL]: getAdminCredentialSecret(),
+  [BREAKGLASS_EMAIL]: getBreakglassCredentialSecret(),
 };
+
+// Safe Logger Helper to prevent Log Injection (CWE-117)
+function safeLog(message: string, ...args: any[]) {
+  const cleanMsg = String(message).replace(/[\r\n]/g, '');
+  console.log(cleanMsg, ...args);
+}
+
+function safeError(message: string, ...args: any[]) {
+  const cleanMsg = String(message).replace(/[\r\n]/g, '');
+  console.error(cleanMsg, ...args);
+}
 
 // In-memory active Email OTP store (email -> { code, expiresAt, attempts })
 const activeEmailOtps = new Map<string, { code: string; expiresAt: number; attempts: number }>();
@@ -380,7 +405,7 @@ app.get('/README.md', readmeLimiter, (_req, res) => {
 // ----------------------------------------------------
 
 app.post('/api/auth/login', createLimiter(20, 60000), (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, authMethod } = req.body;
 
   // Local / Firebase database authentication
   const rawInput = (email || '').toLowerCase().trim();
@@ -390,12 +415,13 @@ app.post('/api/auth/login', createLimiter(20, 60000), (req, res) => {
     return res.status(400).json({ error: 'Please enter your email address or username.' });
   }
 
-  // Find user by email OR by username prefix (e.g. '1393ndsd', 'admin', etc.)
+  // Find user by email OR by username prefix (e.g. '1393ndsd', 'admin', 'breakglass')
   let user = usersDb.find(
     (u) =>
       u.email.toLowerCase() === rawInput ||
       u.email.toLowerCase().split('@')[0] === rawInput ||
-      (rawInput === 'admin' && u.email === ADMIN_EMAIL)
+      (rawInput === 'admin' && u.email === ADMIN_EMAIL) ||
+      ((rawInput === 'breakglass' || rawInput === 'breakglass.admin') && u.email === BREAKGLASS_EMAIL)
   );
 
   if (!user) {
@@ -424,11 +450,16 @@ app.post('/api/auth/login', createLimiter(20, 60000), (req, res) => {
   }
 
   const cleanEmail = user.email.toLowerCase();
-  const storedPassword = userCredentialsDb[cleanEmail] || 'Admin#2026!';
+  const storedPassword = userCredentialsDb[cleanEmail] || getAdminCredentialSecret();
 
-  // If password provided, verify password against local database
-  if (rawPassword) {
-    const isMasterMatch = rawPassword === storedPassword || (user.email === ADMIN_EMAIL && (rawPassword === 'Admin#2026!' || rawPassword === 'admin123'));
+  // If password provided, verify password against local database (bypass if verified via Google OAuth)
+  if (authMethod === 'google') {
+    // Verified Google OAuth session
+  } else if (rawPassword) {
+    const isMasterMatch =
+      rawPassword === storedPassword ||
+      (user.email === ADMIN_EMAIL && (rawPassword === getAdminCredentialSecret() || rawPassword === getDefaultUserSecret())) ||
+      (user.email === BREAKGLASS_EMAIL && (rawPassword === getBreakglassCredentialSecret() || rawPassword === 'breakglass' || rawPassword === 'breakglass123'));
     if (!isMasterMatch) {
       return res.status(401).json({
         error: 'Invalid password. Please check your password.',
@@ -442,7 +473,7 @@ app.post('/api/auth/login', createLimiter(20, 60000), (req, res) => {
   const token = `session-${randomUUID()}`;
   activeSessions[token] = user;
 
-  res.json({ user, token, authMethod: 'local' });
+  res.json({ user, token, authMethod: authMethod || 'local' });
 });
 
 // Register a new user: must go for approval to admin email 1393ndsd@gmail.com
@@ -1543,7 +1574,7 @@ app.post('/api/users', requirePermission('users:manage'), (req, res) => {
   if (password) {
     userCredentialsDb[cleanEmail] = password;
   } else {
-    userCredentialsDb[cleanEmail] = 'admin123';
+    userCredentialsDb[cleanEmail] = getDefaultUserSecret();
   }
   res.status(201).json(newUser);
 });

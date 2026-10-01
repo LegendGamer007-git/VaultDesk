@@ -1,8 +1,9 @@
 {
   "projectId": "sound-disk-mmn89",
   "appId": "1:817655929871:web:f38a863a170439f58bd77a",
-  "apiKey": "AIzaSyAbfpQ3ULTU9gjR-bED6g4ChbVbjjJPBgU",
+  "apiKey": "",
   "authDomain": "sound-disk-mmn89.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-vaultdesk-77a73e5e-6c85-42ab-b715-57c0366a4b06",
   "storageBucket": "sound-disk-mmn89.firebasestorage.app",
   "messagingSenderId": "817655929871",
   "measurementId": "",

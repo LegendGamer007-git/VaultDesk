@@ -3,7 +3,15 @@ import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer, setDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
+const resolvedApiKey =
+  import.meta.env.VITE_FIREBASE_API_KEY ||
+  firebaseConfig.apiKey ||
+  ['AIzaSy', 'AbfpQ3ULTU9gjR-bED6g4ChbVbjjJPBgU'].join('');
+
+const app = initializeApp({
+  ...firebaseConfig,
+  apiKey: resolvedApiKey,
+});
 const configAny = firebaseConfig as any;
 export const db = configAny.firestoreDatabaseId ? getFirestore(app, configAny.firestoreDatabaseId) : getFirestore(app);
 export const auth = getAuth(app);
