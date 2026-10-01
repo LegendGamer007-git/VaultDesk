@@ -2,14 +2,12 @@ import {
   UserProfile,
   CustomRoleDefinition,
   UserPermission,
-  LdapConfig,
-  SamlConfig,
 } from '../types';
 
 export interface PermissionMeta {
   id: UserPermission;
   label: string;
-  category: 'Knowledge Base' | 'Troubleshooting & Runbooks' | 'Log Analyzer' | 'Updates & Security' | 'User Management' | 'Enterprise SSO & LDAP' | 'PSM Web Connectors';
+  category: 'Knowledge Base' | 'Troubleshooting & Runbooks' | 'Log Analyzer' | 'Updates & Security' | 'User Management' | 'PSM Web Connectors';
   description: string;
 }
 
@@ -111,21 +109,7 @@ export const ALL_PERMISSIONS: PermissionMeta[] = [
     id: 'users:manage',
     label: 'Manage Users & Permissions',
     category: 'User Management',
-    description: 'Change user roles, suspend/activate accounts, and edit custom RBAC mappings.',
-  },
-
-  // Enterprise SSO & LDAP
-  {
-    id: 'auth:configure_ldap',
-    label: 'Configure Active Directory / LDAP',
-    category: 'Enterprise SSO & LDAP',
-    description: 'Set up domain controller connections, bind credentials, and group-to-role mappings.',
-  },
-  {
-    id: 'auth:configure_saml',
-    label: 'Configure SAML 2.0 Identity Provider',
-    category: 'Enterprise SSO & LDAP',
-    description: 'Manage IdP certificates, assertion URLs, and single sign-on metadata.',
+    description: 'Change user roles, approve new user registrations, suspend accounts, and edit RBAC mappings.',
   },
 
   // PSM Web Connectors
@@ -143,16 +127,9 @@ export const ALL_PERMISSIONS: PermissionMeta[] = [
   },
 ];
 
-export const SYSTEM_ROLE_PERMISSIONS: Record<'admin' | 'reader' | 'engineer', UserPermission[]> = {
+export const SYSTEM_ROLE_PERMISSIONS: Record<'superadmin' | 'admin' | 'engineer' | 'operator' | 'reader', UserPermission[]> = {
+  superadmin: ALL_PERMISSIONS.map((p) => p.id),
   admin: ALL_PERMISSIONS.map((p) => p.id),
-  reader: [
-    'kb:read',
-    'troubleshoot:read',
-    'troubleshoot:export',
-    'updates:read',
-    'users:read',
-    'connectors:read',
-  ],
   engineer: [
     'kb:read',
     'kb:write',
@@ -164,9 +141,22 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<'admin' | 'reader' | 'engineer', Us
     'logs:save',
     'updates:read',
     'updates:sync',
-    'users:read',
     'connectors:read',
     'connectors:manage',
+  ],
+  operator: [
+    'kb:read',
+    'troubleshoot:read',
+    'troubleshoot:export',
+    'logs:analyze',
+    'updates:read',
+    'connectors:read',
+  ],
+  reader: [
+    'kb:read',
+    'troubleshoot:read',
+    'updates:read',
+    'connectors:read',
   ],
 };
 
@@ -184,132 +174,21 @@ export const INITIAL_CUSTOM_ROLES: CustomRoleDefinition[] = [
     ],
     createdAt: '2026-09-01T08:00:00Z',
   },
-  {
-    id: 'role-runbook-author',
-    name: 'Runbook Technical Lead',
-    description: 'Technical author dedicated to publishing, maintaining, and drafting enterprise SOPs and recovery playbooks.',
-    permissions: [
-      'kb:read',
-      'kb:write',
-      'kb:publish',
-      'kb:delete',
-      'troubleshoot:read',
-      'troubleshoot:export',
-      'updates:read',
-      'users:read',
-    ],
-    createdAt: '2026-09-05T10:30:00Z',
-  },
 ];
 
+// Single Admin Account in local Firebase database (All demo accounts removed)
 export const INITIAL_USERS: UserProfile[] = [
   {
-    id: 'usr-admin-1',
-    name: 'Alexander Ward',
-    email: 'admin@vaultdesk.internal',
-    role: 'admin',
-    permissions: SYSTEM_ROLE_PERMISSIONS.admin,
-    authSource: 'local',
+    id: 'usr-admin-primary',
+    name: 'Administrator',
+    email: '1393ndsd@gmail.com',
+    role: 'superadmin',
+    permissions: ALL_PERMISSIONS.map((p) => p.id),
+    authSource: 'firebase',
     status: 'active',
     department: 'PAM Architecture & SecOps',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    lastLoginAt: '2026-09-28T08:15:00Z',
-    createdAt: '2026-08-01T09:00:00Z',
-  },
-  {
-    id: 'usr-reader-1',
-    name: 'Sarah Chen (Reader)',
-    email: 'reader@vaultdesk.internal',
-    role: 'reader',
-    permissions: SYSTEM_ROLE_PERMISSIONS.reader,
-    authSource: 'local',
-    status: 'active',
-    department: 'IT Compliance & Audit',
-    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    lastLoginAt: '2026-09-27T16:40:00Z',
-    createdAt: '2026-08-15T11:20:00Z',
-  },
-  {
-    id: 'usr-eng-1',
-    name: 'Marcus Vance (Engineer)',
-    email: 'engineer@vaultdesk.internal',
-    role: 'engineer',
-    permissions: SYSTEM_ROLE_PERMISSIONS.engineer,
-    authSource: 'local',
-    status: 'active',
-    department: 'Privileged Access Operations',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    lastLoginAt: '2026-09-28T07:50:00Z',
-    createdAt: '2026-08-20T14:10:00Z',
-  },
-  {
-    id: 'usr-ldap-1',
-    name: 'Dmitri Pavlov',
-    email: 'dmitri.pavlov@corp.internal',
-    role: 'engineer',
-    permissions: SYSTEM_ROLE_PERMISSIONS.engineer,
-    authSource: 'ldap',
-    status: 'active',
-    department: 'Infrastructure SecOps',
-    lastLoginAt: '2026-09-26T12:00:00Z',
-    createdAt: '2026-09-02T10:00:00Z',
-  },
-  {
-    id: 'usr-invited-1',
-    name: 'Elena Rostova',
-    email: 'elena.rostova@cyberark-partner.internal',
-    role: 'admin',
-    permissions: SYSTEM_ROLE_PERMISSIONS.admin,
-    authSource: 'local',
-    status: 'invited',
-    department: 'Principal PAM Architect',
-    createdAt: '2026-09-27T10:00:00Z',
-    invitationToken: 'inv-tok-9842f1a8',
-    invitationExpiresAt: '2026-10-04T10:00:00Z',
-    invitationNote: 'Welcome to the VaultDesk PAM Operations Portal. Please set up your administrator credentials.',
+    lastLoginAt: '2026-10-01T00:00:00Z',
+    createdAt: '2026-10-01T00:00:00Z',
   },
 ];
-
-export const DEFAULT_LDAP_CONFIG: LdapConfig = {
-  enabled: true,
-  serverUrl: 'ldaps://ad.corp.internal:636',
-  bindDn: 'CN=svc-vaultdesk,OU=ServiceAccounts,DC=corp,DC=internal',
-  bindPassword: '••••••••••••••••',
-  baseSearchDn: 'DC=corp,DC=internal',
-  userSearchFilter: '(&(objectClass=user)(sAMAccountName={username}))',
-  groupSearchFilter: '(&(objectClass=group)(member={userDn}))',
-  useTls: true,
-  roleMappings: [
-    { ldapGroup: 'CN=PAM_Vault_Admins,OU=SecurityGroups,DC=corp,DC=internal', role: 'admin' },
-    { ldapGroup: 'CN=PAM_Engineers,OU=SecurityGroups,DC=corp,DC=internal', role: 'engineer' },
-    { ldapGroup: 'CN=SecOps_Auditors,OU=SecurityGroups,DC=corp,DC=internal', role: 'reader' },
-  ],
-  syncIntervalMinutes: 60,
-  lastTestedAt: '2026-09-28T06:30:00Z',
-  lastStatus: 'success',
-  lastStatusMessage: 'Connected to Active Directory DC01.corp.internal (TLS handshake verified, 1,420 user records indexed).',
-};
-
-// Sample non-production mock X.509 IdP Certificate for test assertions and UI preview only
-// # gitleaks:allow
-export const DEFAULT_SAML_CONFIG: SamlConfig = {
-  enabled: true,
-  idpIssuer: 'https://cyberark-identity.corp.internal/saml/metadata',
-  ssoUrl: 'https://cyberark-identity.corp.internal/saml/sso',
-  // # gitleaks:allow
-  x509Certificate: `-----BEGIN CERTIFICATE-----
-MIIDpDCCAoygAwIBAgIGAXv4fL7+MA0GCSqGSIb3DQEBCwUAMIGQMQswCQYDVQQGEwJV
-UzELMAkGA1UECBMCQ0ExEjAQBgNVBAcTCVN1bm55dmFsZTEbMBkGA1UEChMSQ3liZXJB
-cmsgSWRlbnRpdHkxGzAZBgNVBAsTElByaXZpbGVnZSBDbG91ZDEhMB8GA1UEAxMYVmF1
-bHREZXNrIFNBTUwgUHJvdmlkZXIwHhcNMjYwMTAxMDAwMDAwWhcNMzAwMTAxMDAwMDAw
-WjCBkDELMAkGA1UEBhMCVVMxCzAJBgNVBAgTAkNB...
------END CERTIFICATE-----`,
-  spEntityId: 'https://vaultdesk.internal/saml/metadata',
-  acsUrl: 'https://vaultdesk.internal/api/auth/saml/acs',
-  signRequests: true,
-  jitEnabled: true,
-  defaultJitRole: 'reader',
-  lastTestedAt: '2026-09-28T07:15:00Z',
-  lastStatus: 'success',
-  lastStatusMessage: 'SAML 2.0 metadata verified. IdP assertion certificate valid until 2030.',
-};

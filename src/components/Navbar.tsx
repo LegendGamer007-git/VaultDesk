@@ -17,6 +17,7 @@ import { UserProfile } from '../types';
 import { ThemeToggle, ThemeMode } from './ThemeToggle';
 
 export type NavTab =
+  | 'compliance'
   | 'troubleshooting'
   | 'wizard'
   | 'connectors'
@@ -41,7 +42,6 @@ interface NavbarProps {
   };
   currentUser?: UserProfile | null;
   onLogout?: () => void;
-  onSwitchDemoUser?: (email: string) => void;
   onOpenReadme?: () => void;
   currentTheme?: ThemeMode;
   onThemeChange?: (theme: ThemeMode) => void;
@@ -59,7 +59,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   apiStatus,
   currentUser,
   onLogout,
-  onSwitchDemoUser,
   onOpenReadme,
   currentTheme = 'light',
   onThemeChange,
@@ -70,6 +69,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const TAB_TITLES: Record<NavTab, string> = {
+    compliance: 'Privileged Accounts Compliance & CPM Operations',
     troubleshooting: 'Overview & Troubleshooting',
     wizard: 'Diagnostic Wizard & Logs',
     connectors: 'PSM Connector Studio',
@@ -208,50 +208,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
                   </div>
 
-                  {/* Quick Role Switcher */}
-                  {onSwitchDemoUser && (
-                    <div className="space-y-1 pb-3 border-b border-[#E6EFF5] dark:border-white/10">
-                      <span className="text-[10px] font-bold text-[#8BA3CB] uppercase tracking-wider block">
-                        Switch Role (RBAC Tester)
-                      </span>
-                      <button
-                        onClick={() => {
-                          onSwitchDemoUser('admin@vaultdesk.internal');
-                          setIsUserMenuOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between hover:bg-[#F4F5F9] dark:hover:bg-white/5 transition-colors ${
-                          currentUser.role === 'admin' ? 'text-[#396AFF] font-bold' : 'text-[#718EBF]'
-                        }`}
-                      >
-                        <span>Admin (Alexander Ward)</span>
-                        {currentUser.role === 'admin' && <Check className="w-3.5 h-3.5 text-[#396AFF]" />}
-                      </button>
-                      <button
-                        onClick={() => {
-                          onSwitchDemoUser('engineer@vaultdesk.internal');
-                          setIsUserMenuOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between hover:bg-[#F4F5F9] dark:hover:bg-white/5 transition-colors ${
-                          currentUser.role === 'engineer' ? 'text-[#10B981] font-bold' : 'text-[#718EBF]'
-                        }`}
-                      >
-                        <span>Engineer (Marcus Vance)</span>
-                        {currentUser.role === 'engineer' && <Check className="w-3.5 h-3.5 text-[#10B981]" />}
-                      </button>
-                    </div>
-                  )}
-
                   <div className="space-y-1">
-                    <button
-                      onClick={() => {
-                        setActiveTab('users');
-                        setIsUserMenuOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-xl text-xs text-[#343C6A] dark:text-white hover:bg-[#F4F5F9] dark:hover:bg-white/5 flex items-center gap-2 font-medium"
-                    >
-                      <Users className="w-3.5 h-3.5 text-[#396AFF]" />
-                      <span>User Management & RBAC</span>
-                    </button>
+                    {(currentUser.role === 'superadmin' ||
+                      currentUser.role === 'admin' ||
+                      currentUser.permissions?.includes('users:manage')) && (
+                      <button
+                        onClick={() => {
+                          setActiveTab('users');
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs text-[#343C6A] dark:text-white hover:bg-[#F4F5F9] dark:hover:bg-white/5 flex items-center gap-2 font-medium cursor-pointer"
+                      >
+                        <Users className="w-3.5 h-3.5 text-[#396AFF]" />
+                        <span>User Management & RBAC</span>
+                      </button>
+                    )}
 
                     {onLogout && (
                       <button

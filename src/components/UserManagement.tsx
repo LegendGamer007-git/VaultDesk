@@ -32,6 +32,7 @@ import {
   RotateCcw,
   HardDrive,
   ShieldAlert,
+  AlertTriangle,
 } from 'lucide-react';
 import { UserProfile, UserRole, UserStatus, UserPermission } from '../types';
 
@@ -44,8 +45,19 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   currentUser,
   onUserUpdated,
 }) => {
-  // Top Action Pill Tabs matching uploaded image:
-  // "Users & Permissions" | "Activity Log" | "Sessions" | "Backup & Download" | "Change Password" | "Server Info"
+  const isSuperadmin = currentUser.role === 'superadmin';
+  const isAdmin = currentUser.role === 'admin' || isSuperadmin;
+  const canManageUsers = isAdmin || currentUser.permissions?.includes('users:manage');
+
+  // Helper to attach authorization header
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('vaultdesk_token');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  };
+
+  // Top Action Pill Tabs:
   const [activeTab, setActiveTab] = useState<
     'users' | 'activity' | 'sessions' | 'backup' | 'password' | 'server'
   >('users');
@@ -85,7 +97,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/users');
+      const res = await fetch('/api/users', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setUsers(data);
@@ -101,8 +113,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (canManageUsers) {
+      fetchUsers();
+    }
+  }, [canManageUsers]);
+
+  // If user does not have users:manage or admin privileges, block rendering
+  if (!canManageUsers) {
+    return (
+      <div className="p-8 max-w-4xl mx-auto space-y-6">
+        <div className="p-8 rounded-3xl bg-[#1A1118] border border-[#FF453A]/30 text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-[#FF453A]/10 text-[#FF453A] flex items-center justify-center mx-auto ring-1 ring-[#FF453A]/20">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-white">Access Denied: Administrative Privileges Required</h2>
+            <p className="text-xs text-[#8E9BBA] max-w-md mx-auto leading-relaxed">
+              Your current account role (<strong className="text-[#FF9F0A] uppercase">{currentUser.role}</strong>) does not have administrative privileges to view or manage User & RBAC settings.
+            </p>
+          </div>
+          <div className="pt-2 text-xs text-[#6E7787]">
+            To request administrative access, please contact your VaultDesk System Administrator at <span className="text-[#0A84FF] font-mono">1393ndsd@gmail.com</span>.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Handle Create User Submit
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -116,7 +152,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       const email = username.includes('@') ? username : `${username.toLowerCase()}@vaultdesk.internal`;
       const res = await fetch('/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           name: fullName.trim(),
           email,
@@ -147,13 +183,25 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       return;
     }
 
-    const targetUser = users.find((u) => u.id === resetUserId);
-    showToast(`Password successfully reset for ${targetUser?.name || 'Selected User'}!`);
-    setResetNewPassword('');
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: resetUserId, newPassword: resetNewPassword.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reset password');
+
+      const targetUser = users.find((u) => u.id === resetUserId);
+      showToast(`Password successfully reset for ${targetUser?.name || 'Selected User'}!`);
+      setResetNewPassword('');
+    } catch (err: any) {
+      showToast(err.message || 'Error resetting password', 'error');
+    }
   };
 
   // Handle Self Password Change Submit
-  const handleChangePasswordSelf = (e: React.FormEvent) => {
+  const handleChangePasswordSelf = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newSelfPass !== confirmSelfPass) {
       showToast('New passwords do not match!', 'error');
@@ -163,10 +211,23 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       showToast('Password must be at least 6 characters long', 'error');
       return;
     }
-    showToast('Your password has been changed successfully!');
-    setCurrentPass('');
-    setNewSelfPass('');
-    setConfirmSelfPass('');
+
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id, newPassword: newSelfPass.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+
+      showToast('Your password has been changed successfully!');
+      setCurrentPass('');
+      setNewSelfPass('');
+      setConfirmSelfPass('');
+    } catch (err: any) {
+      showToast(err.message || 'Error changing password', 'error');
+    }
   };
 
   // Handle Toggle Permission
@@ -183,7 +244,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       const updatedUser = { ...permissionModalUser, permissions: userPermissions };
       const res = await fetch(`/api/users/${permissionModalUser.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(updatedUser),
       });
 
@@ -197,6 +258,48 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       }
     } catch (err) {
       showToast('Failed to update permissions', 'error');
+    }
+  };
+
+  // Handle Approve User
+  const handleApproveUser = async (userToApprove: UserProfile) => {
+    try {
+      const res = await fetch(`/api/users/${userToApprove.id}/approve`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to approve user');
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userToApprove.id
+            ? { ...u, status: 'active', approvedBy: '1393ndsd@gmail.com', approvedAt: new Date().toISOString() }
+            : u
+        )
+      );
+      showToast(`User ${userToApprove.name} (${userToApprove.email}) approved! They can now log in.`);
+    } catch (err: any) {
+      showToast(err.message || 'Error approving user', 'error');
+    }
+  };
+
+  // Handle Reject User
+  const handleRejectUser = async (userToReject: UserProfile) => {
+    try {
+      const res = await fetch(`/api/users/${userToReject.id}/reject`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reject user');
+
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userToReject.id ? { ...u, status: 'rejected' } : u))
+      );
+      showToast(`Rejected registration for ${userToReject.name}.`);
+    } catch (err: any) {
+      showToast(err.message || 'Error rejecting user', 'error');
     }
   };
 
@@ -244,6 +347,22 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-[#D8F3DC] text-[#1B4332]">
           <span className="w-2 h-2 rounded-full bg-[#2D6A4F]" />
           <span>Active</span>
+        </span>
+      );
+    }
+    if (status === 'pending_approval') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-[#FEF3C7] text-[#92400E] border border-amber-300">
+          <span className="w-2 h-2 rounded-full bg-[#D97706] animate-pulse" />
+          <span>Pending Approval</span>
+        </span>
+      );
+    }
+    if (status === 'rejected') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-[#FEE2E2] text-[#991B1B]">
+          <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
+          <span>Rejected</span>
         </span>
       );
     }
@@ -532,6 +651,64 @@ export const UserManagement: React.FC<UserManagementProps> = ({
             </div>
           </div>
 
+          {/* PENDING APPROVALS ALERT & ACTION CARD */}
+          {users.some((u) => u.status === 'pending_approval') && (
+            <div className="bg-[#FFFBEB] dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/50 rounded-2xl p-5 shadow-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200 dark:border-amber-800/40 pb-3">
+                <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-extrabold text-sm">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  <span>Pending Registrations (Sent for approval to 1393ndsd@gmail.com)</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-white">
+                    {users.filter((u) => u.status === 'pending_approval').length} Pending
+                  </span>
+                </div>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Without administrator approval, these users cannot log in.
+                </p>
+              </div>
+
+              <div className="divide-y divide-amber-200 dark:divide-amber-800/40">
+                {users
+                  .filter((u) => u.status === 'pending_approval')
+                  .map((pUser) => (
+                    <div key={pUser.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-amber-950 dark:text-white text-sm">{pUser.name}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            Awaiting 1393ndsd@gmail.com
+                          </span>
+                        </div>
+                        <p className="text-amber-800 dark:text-amber-300 font-mono mt-0.5">{pUser.email}</p>
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                          Department: {pUser.department || 'PAM Operations'} • Registered:{' '}
+                          {pUser.createdAt ? new Date(pUser.createdAt).toLocaleString() : 'Recent'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleApproveUser(pUser)}
+                          className="px-3.5 py-2 rounded-lg bg-[#00A896] hover:bg-[#008f81] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                          title="Approve user registration"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Approve Access</span>
+                        </button>
+                        <button
+                          onClick={() => handleRejectUser(pUser)}
+                          className="px-3.5 py-2 rounded-lg bg-[#EF4444] hover:bg-[#DC2626] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                          title="Reject user registration"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Reject</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {/* DATA CARD: ALL USERS TABLE (MATCHING IMAGE.PNG EXACTLY) */}
           <div className="bg-white dark:bg-[#1E2332] p-6 rounded-2xl border border-[#E5E7EB] dark:border-white/10 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#F3F4F6] dark:border-white/10 pb-3">
@@ -594,6 +771,28 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                         </td>
                         <td className="p-3.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Action Buttons for Pending Users */}
+                            {user.status === 'pending_approval' && (
+                              <>
+                                <button
+                                  onClick={() => handleApproveUser(user)}
+                                  className="px-2 py-1 rounded-lg bg-[#D8F3DC] text-[#1B4332] hover:bg-[#2D6A4F] hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1"
+                                  title="Approve User Registration"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Approve</span>
+                                </button>
+                                <button
+                                  onClick={() => handleRejectUser(user)}
+                                  className="px-2 py-1 rounded-lg bg-[#FEE2E2] text-[#991B1B] hover:bg-[#DC2626] hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1"
+                                  title="Reject User Registration"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Reject</span>
+                                </button>
+                              </>
+                            )}
+
                             {/* Shield Permission Editor Button */}
                             <button
                               onClick={() => {
@@ -639,10 +838,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
           <div className="space-y-3">
             {[
-              { user: 'Alexander Ward', action: 'User Logged In', time: '2 mins ago', ip: '192.168.1.102' },
-              { user: 'Marcus Vance', action: 'Created Runbook KB-409', time: '14 mins ago', ip: '10.0.4.15' },
-              { user: 'Sarah Chen', action: 'Exported Troubleshooting Errors CSV', time: '1 hour ago', ip: '172.16.0.8' },
-              { user: 'Super Administrator', action: 'Updated Active Directory LDAP Config', time: '3 hours ago', ip: '127.0.0.1' },
+              { user: currentUser.name || 'Administrator', action: 'Authenticated to PAM Operations Console', time: 'Just now', ip: '127.0.0.1' },
+              { user: 'Security Subsystem', action: 'Synchronized Local Firebase Database Rules', time: '10 mins ago', ip: 'internal' },
+              { user: 'Administrator (1393ndsd@gmail.com)', action: 'Reviewed Pending User Access Approvals', time: '25 mins ago', ip: '127.0.0.1' },
+              { user: 'System Worker', action: 'Verified Single Admin Account in Firestore', time: '1 hour ago', ip: 'internal' },
             ].map((act, i) => (
               <div key={i} className="flex items-center justify-between p-3.5 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 text-xs">
                 <div className="flex items-center gap-3">
@@ -684,20 +883,20 @@ export const UserManagement: React.FC<UserManagementProps> = ({
               </div>
               <p className="text-xs font-bold text-[#111827] dark:text-white">{currentUser.name} ({currentUser.email})</p>
               <div className="text-[11px] text-[#6B7280] dark:text-[#A0AEC0] font-mono">
-                IP: 192.168.1.102 • macOS Chrome 128.0
+                Role: {currentUser.role} • IP: 127.0.0.1
               </div>
             </div>
 
             <div className="p-4 rounded-xl bg-[#F9FAFB] dark:bg-white/5 border border-[#E5E7EB] dark:border-white/10 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-[#111827] dark:text-white">Marcus Vance</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E9ECEF] text-[#495057]">
-                  Idle 12m
+                <span className="font-bold text-xs text-[#111827] dark:text-white">Local Firebase Database</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#D8F3DC] text-[#1B4332]">
+                  Connected
                 </span>
               </div>
-              <p className="text-xs text-[#6B7280]">engineer@vaultdesk.internal</p>
+              <p className="text-xs text-[#6B7280]">Primary Admin: 1393ndsd@gmail.com</p>
               <div className="text-[11px] text-[#6B7280] dark:text-[#A0AEC0] font-mono">
-                IP: 10.0.4.15 • Windows Edge 127.0
+                Status: Secured • RBAC Enforced
               </div>
             </div>
           </div>

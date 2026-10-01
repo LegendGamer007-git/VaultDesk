@@ -1,0 +1,145 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and RBAC permissions record for VaultDesk PAM Operations.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 32, "enum": ["superadmin", "admin", "engineer", "operator", "reader", "custom"] },
+        "authSource": { "type": "string", "maxLength": 32, "enum": ["local", "firebase"] },
+        "status": { "type": "string", "maxLength": 32, "enum": ["active", "pending_approval", "suspended", "rejected"] },
+        "department": { "type": "string", "maxLength": 128 },
+        "avatarUrl": { "type": "string", "maxLength": 512 },
+        "permissions": { "type": "array", "maxLength": 50 },
+        "lastLoginAt": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "approvalRequestedAt": { "type": "string", "maxLength": 64 },
+        "approvedAt": { "type": "string", "maxLength": 64 },
+        "approvedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "name", "email", "role", "authSource", "status"]
+    },
+    "ErrorEntry": {
+      "title": "ErrorEntry",
+      "description": "PAM component error entry and troubleshooting runbook.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 64 },
+        "component": { "type": "string", "maxLength": 64 },
+        "severity": { "type": "string", "maxLength": 32, "enum": ["Critical", "High", "Medium", "Low"] },
+        "title": { "type": "string", "maxLength": 256 },
+        "description": { "type": "string", "maxLength": 2048 },
+        "cause": { "type": "string", "maxLength": 2048 },
+        "resolutionSteps": { "type": "array", "maxLength": 20 },
+        "affectedVersions": { "type": "array", "maxLength": 20 },
+        "logsToCheck": { "type": "array", "maxLength": 20 },
+        "tags": { "type": "array", "maxLength": 20 },
+        "views30d": { "type": "number" },
+        "bookmarks30d": { "type": "number" },
+        "helpfulCount": { "type": "number" },
+        "unhelpfulCount": { "type": "number" },
+        "verifiedByCommunity": { "type": "boolean" },
+        "isCommunityResult": { "type": "boolean" },
+        "communityArticleId": { "type": "string", "maxLength": 64 },
+        "lastUpdated": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "code", "component", "severity", "title", "description", "cause"]
+    },
+    "KbArticle": {
+      "title": "KbArticle",
+      "description": "Local Knowledge Base article definition.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "code": { "type": "string", "maxLength": 64 },
+        "component": { "type": "string", "maxLength": 64 },
+        "category": { "type": "string", "maxLength": 64 },
+        "author": { "type": "string", "maxLength": 128 },
+        "summary": { "type": "string", "maxLength": 1024 },
+        "content": { "type": "string", "maxLength": 10000 },
+        "tags": { "type": "array", "maxLength": 20 },
+        "lastUpdated": { "type": "string", "maxLength": 64 },
+        "bookmarksCount": { "type": "number" }
+      },
+      "required": ["id", "title", "component", "author", "summary", "content"]
+    },
+    "SecurityAdvisory": {
+      "title": "SecurityAdvisory",
+      "description": "Security advisory and CVE bulletin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "cveId": { "type": "string", "maxLength": 64 },
+        "component": { "type": "string", "maxLength": 64 },
+        "severity": { "type": "string", "maxLength": 32 },
+        "publishedDate": { "type": "string", "maxLength": 64 },
+        "summary": { "type": "string", "maxLength": 2048 },
+        "remediation": { "type": "string", "maxLength": 2048 },
+        "affectedVersions": { "type": "array", "maxLength": 20 },
+        "patchUrl": { "type": "string", "maxLength": 512 }
+      },
+      "required": ["id", "title", "cveId", "component", "severity"]
+    },
+    "PsmConnector": {
+      "title": "PsmConnector",
+      "description": "PSM WebForm connector definition.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "targetApp": { "type": "string", "maxLength": 128 },
+        "protocol": { "type": "string", "maxLength": 64 },
+        "version": { "type": "string", "maxLength": 32 },
+        "author": { "type": "string", "maxLength": 128 },
+        "xmlContent": { "type": "string", "maxLength": 20000 },
+        "status": { "type": "string", "maxLength": 32 },
+        "lastTested": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "name", "targetApp", "xmlContent"]
+    },
+    "UserBookmark": {
+      "title": "UserBookmark",
+      "description": "User bookmarked error or runbook reference.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "errorId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "userId", "errorId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles collection."
+    },
+    "/errors/{errorId}": {
+      "schema": { "$ref": "#/entities/ErrorEntry" },
+      "description": "Troubleshooting error knowledge base collection."
+    },
+    "/kb_articles/{articleId}": {
+      "schema": { "$ref": "#/entities/KbArticle" },
+      "description": "Local KB articles collection."
+    },
+    "/advisories/{advisoryId}": {
+      "schema": { "$ref": "#/entities/SecurityAdvisory" },
+      "description": "Security advisories and CVE bulletins collection."
+    },
+    "/connectors/{connectorId}": {
+      "schema": { "$ref": "#/entities/PsmConnector" },
+      "description": "PSM WebForm connectors collection."
+    },
+    "/bookmarks/{bookmarkId}": {
+      "schema": { "$ref": "#/entities/UserBookmark" },
+      "description": "User bookmarked items collection."
+    }
+  }
+}

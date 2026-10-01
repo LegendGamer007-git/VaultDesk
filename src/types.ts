@@ -214,8 +214,8 @@ export interface UserPreferences {
 
 // User Management, Authentication & RBAC Control Types
 export type UserRole = 'superadmin' | 'admin' | 'engineer' | 'operator' | 'reader' | 'custom';
-export type AuthSource = 'local' | 'ldap' | 'saml';
-export type UserStatus = 'active' | 'invited' | 'suspended';
+export type AuthSource = 'local' | 'firebase';
+export type UserStatus = 'active' | 'pending_approval' | 'suspended' | 'rejected' | 'invited';
 
 export type UserPermission =
   | 'kb:read'
@@ -233,8 +233,6 @@ export type UserPermission =
   | 'users:read'
   | 'users:manage'
   | 'users:invite'
-  | 'auth:configure_ldap'
-  | 'auth:configure_saml'
   | 'connectors:read'
   | 'connectors:manage';
 
@@ -261,44 +259,12 @@ export interface UserProfile {
   avatarUrl?: string;
   lastLoginAt?: string;
   createdAt: string;
+  approvalRequestedAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
   invitationToken?: string;
   invitationExpiresAt?: string;
   invitationNote?: string;
-}
-
-export interface LdapConfig {
-  enabled: boolean;
-  serverUrl: string;
-  bindDn: string;
-  bindPassword?: string;
-  baseSearchDn: string;
-  userSearchFilter: string;
-  groupSearchFilter: string;
-  useTls: boolean;
-  roleMappings: {
-    ldapGroup: string;
-    role: UserRole;
-    customRoleId?: string;
-  }[];
-  syncIntervalMinutes: number;
-  lastTestedAt?: string;
-  lastStatus?: 'success' | 'failed' | 'idle';
-  lastStatusMessage?: string;
-}
-
-export interface SamlConfig {
-  enabled: boolean;
-  idpIssuer: string;
-  ssoUrl: string;
-  x509Certificate: string;
-  spEntityId: string;
-  acsUrl: string;
-  signRequests: boolean;
-  jitEnabled: boolean;
-  defaultJitRole: UserRole;
-  lastTestedAt?: string;
-  lastStatus?: 'success' | 'failed' | 'idle';
-  lastStatusMessage?: string;
 }
 
 // PSM Web-Based Custom Connector & WebForm Field Types

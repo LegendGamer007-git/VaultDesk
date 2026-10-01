@@ -11,15 +11,18 @@ import {
   Users,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   ChevronRight,
   Download,
 } from 'lucide-react';
 import { NavTab } from './Navbar';
+import { UserProfile } from '../types';
 
 interface SidebarProps {
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
   advisoryCount: number;
+  currentUser?: UserProfile | null;
   onOpenReadme?: () => void;
   className?: string;
 }
@@ -28,10 +31,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   advisoryCount,
+  currentUser,
   onOpenReadme,
   className = '',
 }) => {
+  const canSeeUsers =
+    currentUser?.role === 'superadmin' ||
+    currentUser?.role === 'admin' ||
+    currentUser?.permissions?.includes('users:read') ||
+    currentUser?.permissions?.includes('users:manage');
+
   const menuItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string; badgeColor?: string }[] = [
+    { id: 'compliance', label: 'Account Compliance', icon: <ShieldCheck className="w-5 h-5" /> },
     { id: 'troubleshooting', label: 'Troubleshooting', icon: <Terminal className="w-5 h-5" /> },
     { id: 'wizard', label: 'Diagnostics', icon: <Wand2 className="w-5 h-5" /> },
     { id: 'connectors', label: 'PSM Connectors', icon: <Globe className="w-5 h-5" /> },
@@ -45,7 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     { id: 'marketplace', label: 'Marketplace', icon: <Layers className="w-5 h-5" /> },
     { id: 'community', label: 'Community Hub', icon: <Cpu className="w-5 h-5" /> },
-    { id: 'users', label: 'Users & RBAC', icon: <Users className="w-5 h-5" /> },
+    ...(canSeeUsers ? [{ id: 'users' as NavTab, label: 'Users & RBAC', icon: <Users className="w-5 h-5" /> }] : []),
     { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
   ];
 

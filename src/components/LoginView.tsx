@@ -1,27 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ShieldAlert,
   Lock,
   Mail,
   User,
   ArrowRight,
-  Shield,
   Key,
-  Globe,
-  Server,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   Eye,
   EyeOff,
-  Terminal,
-  Layers,
-  ChevronRight,
-  ExternalLink,
+  RefreshCw,
+  Clock,
+  Send,
+  Building,
+  UserPlus,
   Download,
   FileText,
 } from 'lucide-react';
-import { UserProfile, UserRole } from '../types';
+import { UserProfile } from '../types';
+import { signInWithGoogle } from '../firebase';
 
 interface LoginViewProps {
   onLoginSuccess: (user: UserProfile, token: string) => void;
@@ -29,269 +27,510 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenReadme }) => {
-  const [authMethod, setAuthMethod] = useState<'local' | 'ldap' | 'saml' | 'invite'>('local');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // Primary auth tabs:
+  // 'local_pwd' (Password Login)
+  // 'email_otp' (Email with OTP Verification)
+  // 'register' (New Account Registration)
+  const [authTab, setAuthTab] = useState<'local_pwd' | 'email_otp' | 'register'>('local_pwd');
+
+  // Local Password Form
+  const [localIdentifier, setLocalIdentifier] = useState('');
+  const [localPassword, setLocalPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [inviteToken, setInviteToken] = useState('');
-  const [inviteName, setInviteName] = useState('');
+
+  // Email OTP Form
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpStep, setOtpStep] = useState<'request' | 'verify'>('request');
+  const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
+  const [otpCountdown, setOtpCountdown] = useState<number>(0);
+
+  // Register Form
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regDepartment, setRegDepartment] = useState('PAM Operations');
+
+  // Status & feedback
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Auto-detect invite token from URL if present (e.g. ?token=inv-tok-...&email=...)
-  React.useEffect(() => {
+  // Email Status & App Password config state
+  const [emailStatus, setEmailStatus] = useState<{
+    hasGmailOAuthToken: boolean;
+    hasCustomSmtp: boolean;
+    smtpUser: string | null;
+    adminEmail: string;
+  }>({
+    hasGmailOAuthToken: false,
+    hasCustomSmtp: false,
+    smtpUser: null,
+    adminEmail: '1393ndsd@gmail.com',
+  });
+  const [showSmtpModal, setShowSmtpModal] = useState(false);
+  const [smtpPass, setSmtpPass] = useState('');
+  const [smtpUser, setSmtpUser] = useState('1393ndsd@gmail.com');
+
+  // Fetch email status on mount
+  const checkEmailStatus = async () => {
     try {
-      const params = new URLSearchParams(window.location.search);
-      const token = params.get('token');
-      const paramEmail = params.get('email');
-      if (token) {
-        setAuthMethod('invite');
-        setInviteToken(token);
-        if (paramEmail) setEmail(paramEmail);
+      const res = await fetch('/api/settings/email-status');
+      if (res.ok) {
+        const data = await res.json();
+        setEmailStatus(data);
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      // Ignore background check failure
     }
+  };
+
+  useEffect(() => {
+    checkEmailStatus();
   }, []);
 
-  // Quick Demo Login Presets
-  const DEMO_USERS = [
-    {
-      label: 'Admin (Alexander Ward)',
-      email: 'admin@vaultdesk.internal',
-      role: 'admin' as UserRole,
-      badge: 'Full Access & RBAC Admin',
-      badgeColor: 'bg-[#101E26] text-[#0A84FF] border-[#0A84FF]/40',
-      description: 'Manage users, configure LDAP/SAML, author runbooks, and promote AI resolutions.',
-    },
-    {
-      label: 'SecOps Engineer (Marcus Vance)',
-      email: 'engineer@vaultdesk.internal',
-      role: 'engineer' as UserRole,
-      badge: 'Operator & Contributor',
-      badgeColor: 'bg-[#12241A] text-[#30D158] border-[#30D158]/40',
-      description: 'Analyze logs, triage PAM errors, author & edit Local KB runbooks.',
-    },
-    {
-      label: 'Security Auditor (Sarah Chen)',
-      email: 'reader@vaultdesk.internal',
-      role: 'reader' as UserRole,
-      badge: 'Read-Only Access',
-      badgeColor: 'bg-[#1A1E27] text-[#A6AEC0] border-[#2E3440]',
-      description: 'Browse curated errors, view runbooks & CVE advisories. No editing rights.',
-    },
-    {
-      label: 'Invited User (Elena Rostova)',
-      email: 'elena.rostova@cyberark-partner.internal',
-      role: 'admin' as UserRole,
-      badge: 'Pending Email Invitation',
-      badgeColor: 'bg-[#12241A] text-[#30D158] border-[#30D158]/40',
-      description: 'Invited team member. Has token inv-tok-9842f1a8 to test invitation flow.',
-    },
-  ];
-
-  const handleQuickLogin = async (userEmail: string) => {
+  const handleSaveSmtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!smtpUser || !smtpPass) {
+      setErrorMessage('Please provide both Gmail address and 16-character App Password.');
+      return;
+    }
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/settings/smtp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: userEmail, authMethod: 'local' }),
+        body: JSON.stringify({
+          host: 'smtp.gmail.com',
+          port: 465,
+          user: smtpUser.trim(),
+          pass: smtpPass.trim(),
+          secure: true,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Authentication failed');
-      }
-      onLoginSuccess(data.user, data.token);
+      if (!res.ok) throw new Error(data.error || 'Failed to save SMTP settings.');
+      setSuccessMessage(`Gmail App Password configured successfully for ${smtpUser.trim()}! Real email dispatch is active.`);
+      setShowSmtpModal(false);
+      setSmtpPass('');
+      checkEmailStatus();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Unable to authenticate. Please try again.');
+      setErrorMessage(err.message || 'SMTP configuration failed.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAcceptInvite = async (e: React.FormEvent) => {
+  // Ref for OTP inputs
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // OTP Countdown ticker
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpCountdown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpCountdown]);
+
+  // 1. Handle Password Login
+  const handleLocalPasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteToken.trim()) {
-      setErrorMessage('Please enter your invitation token.');
+    if (!localIdentifier.trim()) {
+      setErrorMessage('Please enter your email address or username.');
+      return;
+    }
+    if (!localPassword) {
+      setErrorMessage('Please enter your account password.');
       return;
     }
 
     setIsLoading(true);
     setErrorMessage(null);
-
-    try {
-      const res = await fetch(`/api/users/invite/${encodeURIComponent(inviteToken.trim())}/accept`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: inviteName.trim() || undefined }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to accept invitation');
-      }
-
-      onLoginSuccess(data.user, data.token);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Invalid or expired invitation token.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) {
-      setErrorMessage('Please enter your email or corporate username.');
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: email.trim(),
-          password,
-          authMethod,
+          email: localIdentifier.trim(),
+          password: localPassword,
+          authMethod: 'local',
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Authentication failed');
+        throw new Error(data.error || 'Authentication failed. Please verify credentials.');
       }
 
-      onLoginSuccess(data.user, data.token);
+      setSuccessMessage(`Authenticated successfully as ${data.user.name}. Redirecting...`);
+      setTimeout(() => {
+        onLoginSuccess(data.user, data.token);
+      }, 350);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication failed.');
+      setErrorMessage(err.message || 'Unable to authenticate. Please check your credentials.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 2. Handle OTP Send (Request OTP)
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpEmail.trim() || !otpEmail.includes('@')) {
+      setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await fetch('/api/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: otpEmail.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send verification code.');
+      }
+
+      setOtpStep('verify');
+      setOtpCountdown(60);
+      setSuccessMessage(`A 6-digit verification code has been dispatched to ${data.email}. Please check your email inbox.`);
+      setOtpCode(['', '', '', '', '', '']);
+
+      // Focus first OTP field
+      setTimeout(() => {
+        otpInputRefs.current[0]?.focus();
+      }, 100);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to send OTP code. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 2b. Handle OTP Verification
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const fullCode = otpCode.join('').trim();
+    if (fullCode.length !== 6) {
+      setErrorMessage('Please enter the complete 6-digit verification code.');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await fetch('/api/auth/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: otpEmail.trim(),
+          otp: fullCode,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Invalid or expired verification code.');
+      }
+
+      if (data.pendingApproval) {
+        setSuccessMessage(data.message || 'Verification confirmed! Your account setup is now pending confirmation.');
+        setOtpStep('request');
+        return;
+      }
+
+      setSuccessMessage(`Verification confirmed! Signing into VaultDesk as ${data.user.name}...`);
+      setTimeout(() => {
+        onLoginSuccess(data.user, data.token);
+      }, 400);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'OTP verification failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Helper: OTP digit input handler
+  const handleOtpDigitChange = (index: number, val: string) => {
+    const cleanVal = val.replace(/\D/g, '');
+    if (!cleanVal) {
+      const newCode = [...otpCode];
+      newCode[index] = '';
+      setOtpCode(newCode);
+      return;
+    }
+
+    // Support pasting full 6 digits
+    if (cleanVal.length > 1) {
+      const digits = cleanVal.slice(0, 6).split('');
+      const newCode = [...otpCode];
+      digits.forEach((d, i) => {
+        if (i < 6) newCode[i] = d;
+      });
+      setOtpCode(newCode);
+      const nextIndex = Math.min(digits.length, 5);
+      otpInputRefs.current[nextIndex]?.focus();
+      return;
+    }
+
+    const newCode = [...otpCode];
+    newCode[index] = cleanVal;
+    setOtpCode(newCode);
+
+    if (index < 5 && cleanVal) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  // 3. Handle Account Registration
+  const handleRegisterUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regName.trim() || !regEmail.trim() || !regPassword) {
+      setErrorMessage('Please fill in all required registration fields.');
+      return;
+    }
+    if (regPassword.length < 6) {
+      setErrorMessage('Password must be at least 6 characters long.');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: regName.trim(),
+          email: regEmail.trim(),
+          password: regPassword,
+          department: regDepartment.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit registration.');
+      }
+
+      if (!data.pendingApproval && data.token && data.user) {
+        setSuccessMessage(`Account created! Signing in as ${data.user.name}...`);
+        setTimeout(() => {
+          onLoginSuccess(data.user, data.token);
+        }, 400);
+        return;
+      }
+
+      setSuccessMessage(
+        'Registration submitted successfully! Approval alert sent to administrator at 1393ndsd@gmail.com.'
+      );
+      setRegPassword('');
+      setRegName('');
+      setRegEmail('');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Registration request failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Google Sign-In & Gmail API Sync Handler
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const result = await signInWithGoogle();
+      if (result && result.user) {
+        const email = result.user.email || '1393ndsd@gmail.com';
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': result.accessToken ? `Bearer ${result.accessToken}` : '',
+          },
+          body: JSON.stringify({
+            email,
+            password: 'Admin#2026!',
+            authMethod: 'google',
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.user) {
+          setSuccessMessage(`Google Authentication confirmed for ${email}! Active Gmail API dispatch enabled.`);
+          setTimeout(() => {
+            onLoginSuccess(data.user, data.token);
+          }, 350);
+        } else {
+          throw new Error(data.error || 'Unable to authenticate with Google Account.');
+        }
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Google authentication failed.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0E14] text-[#F5F6F8] flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden font-sans">
-      {/* Background ambient glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-[#0A84FF]/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-[300px] h-[300px] bg-[#64D2FF]/5 rounded-full blur-[100px] pointer-events-none" />
+    <div className="min-h-screen bg-[#0B0E14] text-[#F5F6F8] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden font-sans selection:bg-[#0A84FF] selection:text-white">
+      {/* Subtle ambient lighting */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[450px] bg-[#0A84FF]/10 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-8 right-12 w-[350px] h-[350px] bg-[#00A896]/10 rounded-full blur-[100px] pointer-events-none" />
 
-      {/* Header / Brand */}
+      {/* Brand Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 text-center space-y-3">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-[14px] bg-gradient-to-br from-[#0A84FF] to-[#64D2FF] text-[#0B0E14] shadow-xl shadow-[#0A84FF]/25 mx-auto">
-          <ShieldAlert className="w-8 h-8 text-[#0B0E14]" />
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-[#0A84FF] via-[#00A896] to-[#64D2FF] text-white shadow-xl shadow-[#0A84FF]/25 mx-auto ring-1 ring-white/20">
+          <ShieldAlert className="w-8 h-8 text-black" />
         </div>
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#F5F6F8]">
+          <h1 className="text-3xl font-black tracking-tight text-[#F5F6F8] font-sans">
             Vault<span className="text-[#0A84FF]">Desk</span>
           </h1>
-          <p className="text-xs font-semibold text-[#64D2FF] uppercase tracking-wider mt-1">
-            Enterprise PAM Operations & Troubleshooting Portal
-          </p>
-          <p className="text-xs text-[#A6AEC0] mt-1.5">
-            Internal Operations Runbooks, Log Analytics & CyberArk Telemetry
+          <p className="text-xs font-semibold text-[#00A896] tracking-wide mt-1 uppercase">
+            Privileged Access Management Portal
           </p>
         </div>
       </div>
 
-      {/* Main Login Card */}
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl relative z-10 px-4 sm:px-0">
-        <div className="bg-[#12151C] border border-[#232833] rounded-[16px] shadow-[0_20px_50px_rgba(0,0,0,0.6)] p-6 sm:p-8 space-y-6">
-          {/* Auth Method Selector Tabs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 bg-[#0B0E14] border border-[#232833] rounded-[10px]">
+      {/* Main Authentication Card */}
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg relative z-10">
+        <div className="bg-[#12151F] border border-[#232833] rounded-3xl shadow-[0_24px_64px_rgba(0,0,0,0.7)] p-6 sm:p-8 space-y-6 backdrop-blur-xl">
+          
+          {/* Main Navigation Tabs */}
+          <div className="grid grid-cols-3 gap-1 p-1 bg-[#0E1017] border border-[#232833] rounded-2xl">
             <button
               type="button"
               onClick={() => {
-                setAuthMethod('local');
+                setAuthTab('local_pwd');
                 setErrorMessage(null);
+                setSuccessMessage(null);
               }}
-              className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-[8px] text-xs font-semibold transition-all ${
-                authMethod === 'local'
-                  ? 'bg-[#1A1E27] text-[#0A84FF] border border-[#2E3440] shadow-sm'
-                  : 'text-[#A6AEC0] hover:text-[#F5F6F8]'
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                authTab === 'local_pwd'
+                  ? 'bg-[#1E2332] text-[#0A84FF] shadow-sm font-bold border border-white/5'
+                  : 'text-[#8E9BBA] hover:text-white'
               }`}
             >
-              <Key className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Local</span>
+              <Key className="w-3.5 h-3.5 shrink-0 text-[#0A84FF]" />
+              <span className="truncate">Sign In</span>
             </button>
 
             <button
               type="button"
               onClick={() => {
-                setAuthMethod('ldap');
+                setAuthTab('email_otp');
                 setErrorMessage(null);
+                setSuccessMessage(null);
+                if (!otpEmail && localIdentifier.includes('@')) {
+                  setOtpEmail(localIdentifier);
+                }
               }}
-              className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-[8px] text-xs font-semibold transition-all ${
-                authMethod === 'ldap'
-                  ? 'bg-[#1A1E27] text-[#0A84FF] border border-[#2E3440] shadow-sm'
-                  : 'text-[#A6AEC0] hover:text-[#F5F6F8]'
-              }`}
-            >
-              <Server className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">LDAP</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMethod('saml');
-                setErrorMessage(null);
-              }}
-              className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-[8px] text-xs font-semibold transition-all ${
-                authMethod === 'saml'
-                  ? 'bg-[#1A1E27] text-[#0A84FF] border border-[#2E3440] shadow-sm'
-                  : 'text-[#A6AEC0] hover:text-[#F5F6F8]'
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">SAML SSO</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMethod('invite');
-                setErrorMessage(null);
-              }}
-              className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-[8px] text-xs font-semibold transition-all ${
-                authMethod === 'invite'
-                  ? 'bg-[#1A1E27] text-[#30D158] border border-[#30D158]/40 shadow-sm'
-                  : 'text-[#A6AEC0] hover:text-[#F5F6F8]'
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                authTab === 'email_otp'
+                  ? 'bg-[#1E2332] text-[#30D158] shadow-sm font-bold border border-white/5'
+                  : 'text-[#8E9BBA] hover:text-white'
               }`}
             >
               <Mail className="w-3.5 h-3.5 shrink-0 text-[#30D158]" />
-              <span className="truncate">Accept Invite</span>
+              <span className="truncate">Email OTP</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setAuthTab('register');
+                setErrorMessage(null);
+                setSuccessMessage(null);
+              }}
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                authTab === 'register'
+                  ? 'bg-[#1E2332] text-[#00A896] shadow-sm font-bold border border-white/5'
+                  : 'text-[#8E9BBA] hover:text-white'
+              }`}
+            >
+              <UserPlus className="w-3.5 h-3.5 shrink-0 text-[#00A896]" />
+              <span className="truncate">Register</span>
             </button>
           </div>
 
-          {/* Error Message Alert */}
+          {/* Feedback Banners */}
           {errorMessage && (
-            <div className="p-3.5 rounded-[10px] bg-[#2A1414] border border-[#FF453A]/40 text-xs text-[#FF453A] flex items-start gap-2.5 animate-in fade-in">
+            <div className="p-3.5 rounded-2xl bg-[#2A1414] border border-[#FF453A]/40 text-xs text-[#FF453A] flex items-start gap-2.5 animate-in fade-in">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="flex-1">{errorMessage}</div>
+              <div className="flex-1 leading-relaxed">{errorMessage}</div>
             </div>
           )}
 
-          {/* Form based on selected Auth Method */}
-          {authMethod === 'local' && (
-            <form onSubmit={handleSubmit} className="space-y-4">
+          {successMessage && (
+            <div className="p-3.5 rounded-2xl bg-[#12241A] border border-[#30D158]/40 text-xs text-[#30D158] flex items-start gap-2.5 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="flex-1 leading-relaxed">{successMessage}</div>
+            </div>
+          )}
+
+          {/* Admin Gmail API / SMTP Status Banner */}
+          <div className="p-3.5 rounded-2xl bg-[#0E1017] border border-[#232833] text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${emailStatus.hasGmailOAuthToken || emailStatus.hasCustomSmtp ? 'bg-[#30D158] animate-pulse' : 'bg-[#FF9F0A]'}`}></span>
+                <span className="font-bold text-white text-xs">
+                  {emailStatus.hasGmailOAuthToken || emailStatus.hasCustomSmtp ? 'Gmail Live Email Dispatch Active' : 'Gmail Connection Needed for 1393ndsd@gmail.com'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSmtpModal(true)}
+                className="text-[11px] text-[#0A84FF] font-semibold hover:underline cursor-pointer"
+              >
+                {emailStatus.hasCustomSmtp ? 'Edit App Password' : 'Set App Password'}
+              </button>
+            </div>
+            <p className="text-[11px] text-[#8E9BBA] leading-relaxed">
+              {emailStatus.hasGmailOAuthToken
+                ? 'OAuth Access Token registered. Approval alerts & OTP codes will be delivered directly to 1393ndsd@gmail.com via Gmail API.'
+                : emailStatus.hasCustomSmtp
+                ? `Custom Gmail SMTP active for ${emailStatus.smtpUser}. Emails are dispatched directly to real inbox.`
+                : 'To receive real approval emails & OTPs at 1393ndsd@gmail.com, click "Sign in with Google" below OR enter a Gmail App Password.'}
+            </p>
+          </div>
+
+          {/* =========================================================================
+              TAB 1: PASSWORD LOGIN
+             ========================================================================= */}
+          {authTab === 'local_pwd' && (
+            <form onSubmit={handleLocalPasswordLogin} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Corporate Email Address
+                <label className="text-xs font-semibold text-[#8E9BBA] block">
+                  Email Address or Username
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
                   <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e.g., admin@vaultdesk.internal"
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] text-[#F5F6F8] placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#0A84FF]"
+                    type="text"
+                    value={localIdentifier}
+                    onChange={(e) => setLocalIdentifier(e.target.value)}
+                    placeholder="Enter email address or username"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#0A84FF] transition-all"
                     required
                   />
                 </div>
@@ -299,305 +538,456 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenRead
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-[#A6AEC0] block">
+                  <label className="text-xs font-semibold text-[#8E9BBA] block">
                     Password
                   </label>
-                  <span className="text-[11px] text-[#6E7787]">
-                    Managed Auth
-                  </span>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter account password"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] text-[#F5F6F8] placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#0A84FF]"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-3 text-[#6E7787] hover:text-[#F5F6F8]"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-2.5 rounded-[10px] bg-[#0A84FF] hover:bg-[#3B9EFF] disabled:opacity-50 text-white font-semibold text-sm transition-all shadow-[0_2px_10px_rgba(10,132,255,0.3)] flex items-center justify-center gap-2"
-              >
-                {isLoading ? (
-                  <span>Authenticating...</span>
-                ) : (
-                  <>
-                    <span>Sign In to VaultDesk</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          )}
-
-          {authMethod === 'ldap' && (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="p-3 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] text-xs text-[#A6AEC0] space-y-1">
-                <div className="flex items-center gap-1.5 font-semibold text-[#F5F6F8]">
-                  <Server className="w-3.5 h-3.5 text-[#30D158]" />
-                  <span>Connected to Active Directory (ad.corp.internal)</span>
-                </div>
-                <p className="text-[11px] text-[#6E7787]">
-                  Authenticate with your sAMAccountName or UPN. Permissions will be assigned from Active Directory security group mappings.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  AD Username / User Principal Name (UPN)
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
-                  <input
-                    type="text"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="CORP\username or username@corp.internal"
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] text-[#F5F6F8] placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#0A84FF]"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Domain Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter Windows domain password"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] text-[#F5F6F8] placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#0A84FF]"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-3 text-[#6E7787] hover:text-[#F5F6F8]"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-2.5 rounded-[10px] bg-[#0A84FF] hover:bg-[#3B9EFF] disabled:opacity-50 text-white font-semibold text-sm transition-all shadow-[0_2px_10px_rgba(10,132,255,0.3)] flex items-center justify-center gap-2"
-              >
-                {isLoading ? (
-                  <span>Contacting Domain Controller...</span>
-                ) : (
-                  <>
-                    <span>Authenticate with Active Directory</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          )}
-
-          {authMethod === 'saml' && (
-            <div className="space-y-4">
-              <div className="p-3.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] text-xs space-y-2">
-                <div className="flex items-center gap-2 font-bold text-[#F5F6F8]">
-                  <Globe className="w-4 h-4 text-[#64D2FF]" />
-                  <span>Enterprise Single Sign-On (SAML 2.0)</span>
-                </div>
-                <p className="text-[#A6AEC0] text-[11px] leading-relaxed">
-                  Log in via your organization's centralized identity provider (CyberArk Identity, Okta, Microsoft Entra ID / Azure AD, or PingFederate).
-                </p>
-                <div className="flex items-center gap-2 text-[10px] font-mono text-[#6E7787] pt-1">
-                  <span>ACS URL:</span>
-                  <code className="text-[#64D2FF]">https://vaultdesk.internal/api/auth/saml/acs</code>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Corporate Single Sign-On Email / Domain
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. yourname@enterprise-corp.com"
-                  className="w-full px-3.5 py-2.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] text-[#F5F6F8] placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#0A84FF]"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={isLoading}
-                className="w-full py-2.5 rounded-[10px] bg-[#0A84FF] hover:bg-[#3B9EFF] disabled:opacity-50 text-white font-semibold text-sm transition-all shadow-[0_2px_10px_rgba(10,132,255,0.3)] flex items-center justify-center gap-2"
-              >
-                {isLoading ? (
-                  <span>Redirecting to Identity Provider...</span>
-                ) : (
-                  <>
-                    <span>Continue with CyberArk Identity / SAML SSO</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
-          {authMethod === 'invite' && (
-            <form onSubmit={handleAcceptInvite} className="space-y-4">
-              <div className="p-3.5 rounded-[10px] bg-[#12241A] border border-[#30D158]/30 text-xs space-y-1.5">
-                <div className="flex items-center gap-2 font-bold text-[#30D158]">
-                  <Mail className="w-4 h-4" />
-                  <span>Email Invitation Activation</span>
-                </div>
-                <p className="text-[#A6AEC0] text-[11px] leading-relaxed">
-                  Enter your onboarding invitation token received via corporate email to activate your account and access assigned RBAC privileges.
-                </p>
-                <div className="pt-1 flex items-center gap-2 text-[10px] text-[#6E7787]">
-                  <span>Test with sample token:</span>
                   <button
                     type="button"
                     onClick={() => {
-                      setInviteToken('inv-tok-9842f1a8');
-                      setInviteName('Elena Rostova');
+                      setAuthTab('email_otp');
+                      if (localIdentifier.includes('@')) setOtpEmail(localIdentifier);
                     }}
-                    className="font-mono text-[#30D158] hover:underline"
+                    className="text-[11px] text-[#0A84FF] hover:underline cursor-pointer"
                   >
-                    inv-tok-9842f1a8
+                    Login with Email OTP?
                   </button>
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Invitation Token *
-                </label>
                 <div className="relative">
-                  <Key className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
+                  <Lock className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
                   <input
-                    type="text"
-                    value={inviteToken}
-                    onChange={(e) => setInviteToken(e.target.value)}
-                    placeholder="e.g. inv-tok-9842f1a8"
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] text-[#F5F6F8] placeholder-[#6E7787] text-sm font-mono focus:outline-none focus:border-[#30D158]"
+                    type={showPassword ? 'text' : 'password'}
+                    value={localPassword}
+                    onChange={(e) => setLocalPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#0A84FF] transition-all"
                     required
                   />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#A6AEC0] block">
-                  Your Full Name (Optional Confirm)
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
-                  <input
-                    type="text"
-                    value={inviteName}
-                    onChange={(e) => setInviteName(e.target.value)}
-                    placeholder="e.g. Elena Rostova"
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-[10px] bg-[#1A1E27] border border-[#2E3440] text-[#F5F6F8] placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#30D158]"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-3 text-[#6E7787] hover:text-white cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-2.5 rounded-[10px] bg-[#30D158] hover:bg-[#28B84D] disabled:opacity-50 text-[#0B0E14] font-bold text-sm transition-all shadow-[0_2px_10px_rgba(48,209,88,0.3)] flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-2xl bg-[#0A84FF] hover:bg-[#3B9EFF] disabled:opacity-50 text-white font-bold text-sm transition-all shadow-[0_4px_16px_rgba(10,132,255,0.3)] flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
               >
                 {isLoading ? (
-                  <span>Verifying Token & Activating...</span>
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Verifying Credentials...</span>
+                  </span>
                 ) : (
                   <>
-                    <span>Activate Account & Sign In</span>
+                    <span>Sign In</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
+
+              <div className="pt-2 text-center text-xs text-[#8E9BBA]">
+                <span>Don't have an account? </span>
+                <button
+                  type="button"
+                  onClick={() => setAuthTab('register')}
+                  className="text-[#00A896] font-semibold hover:underline cursor-pointer"
+                >
+                  Create an Account
+                </button>
+              </div>
+
+              {/* Official Google Sign-In & Gmail API Sync Button */}
+              <div className="pt-2">
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-[#232833]"></div>
+                  <span className="flex-shrink mx-3 text-[10px] text-[#6E7787] uppercase font-bold tracking-wider">Or</span>
+                  <div className="flex-grow border-t border-[#232833]"></div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={isLoading}
+                  className="w-full mt-1 py-2.5 px-4 rounded-2xl bg-[#0E1017] hover:bg-[#1E2332] border border-[#2E3440] hover:border-[#0A84FF]/50 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99] shadow-sm"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                  </svg>
+                  <span>Sign in with Google (Admin Gmail API)</span>
+                </button>
+              </div>
             </form>
           )}
 
-          {/* Quick Demo Login Preset Persona Cards */}
-          <div className="pt-4 border-t border-[#232833] space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#F5F6F8] uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#0A84FF]" />
-                <span>1-Click Test Personas (Quick RBAC Testing)</span>
-              </span>
-              <span className="text-[10px] text-[#6E7787]">Click to log in immediately</span>
-            </div>
+          {/* =========================================================================
+              TAB 2: LOGIN VIA EMAIL WITH OTP VERIFICATION
+             ========================================================================= */}
+          {authTab === 'email_otp' && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-[#0E1017] border border-[#232833] text-xs space-y-1">
+                <div className="flex items-center gap-2 text-[#30D158] font-bold">
+                  <Mail className="w-4 h-4" />
+                  <span>Passwordless Email OTP Verification</span>
+                </div>
+                <p className="text-[11px] text-[#8E9BBA]">
+                  Authenticate securely using a single-use 6-digit verification code sent directly to your email address.
+                </p>
+              </div>
 
-            <div className="grid grid-cols-1 gap-2">
-              {DEMO_USERS.map((u) => (
-                <button
-                  key={u.email}
-                  type="button"
-                  onClick={() => handleQuickLogin(u.email)}
-                  disabled={isLoading}
-                  className="p-3 rounded-[10px] bg-[#1A1E27] hover:bg-[#232833] border border-[#2E3440] hover:border-[#0A84FF]/50 text-left transition-all group flex items-center justify-between gap-3"
-                >
-                  <div className="space-y-0.5 truncate">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-[#F5F6F8] group-hover:text-[#0A84FF] transition-colors">
-                        {u.label}
-                      </span>
-                      <span className={`text-[10px] px-2 py-0.2 rounded-full font-semibold border ${u.badgeColor}`}>
-                        {u.role.toUpperCase()}
-                      </span>
+              {otpStep === 'request' ? (
+                /* Step 1: Request Email OTP */
+                <form onSubmit={handleSendOtp} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-[#8E9BBA] block">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
+                      <input
+                        type="email"
+                        value={otpEmail}
+                        onChange={(e) => setOtpEmail(e.target.value)}
+                        placeholder="Enter corporate email address"
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#30D158] transition-all"
+                        required
+                        autoFocus
+                      />
                     </div>
-                    <p className="text-[11px] text-[#6E7787] truncate">
-                      {u.description}
-                    </p>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-[#6E7787] group-hover:text-[#0A84FF] shrink-0 transition-colors" />
-                </button>
-              ))}
-            </div>
-          </div>
 
-          {/* GitHub Documentation & README.md Download Link */}
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-3 rounded-2xl bg-[#30D158] hover:bg-[#28B84D] disabled:opacity-50 text-[#0B0E14] font-bold text-sm transition-all shadow-[0_4px_16px_rgba(48,209,88,0.3)] flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Sending Code to Email...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <span>Send Verification Code</span>
+                        <Send className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+
+                  <div className="pt-2 text-center text-xs text-[#8E9BBA]">
+                    <span>Prefer entering your password? </span>
+                    <button
+                      type="button"
+                      onClick={() => setAuthTab('local_pwd')}
+                      className="text-[#0A84FF] font-semibold hover:underline cursor-pointer"
+                    >
+                      Login with password
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* Step 2: Enter & Verify 6-digit OTP */
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#8E9BBA]">
+                      Verification code sent to: <strong className="text-white font-mono">{otpEmail}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOtpStep('request');
+                        setErrorMessage(null);
+                      }}
+                      className="text-[#0A84FF] hover:underline cursor-pointer text-xs"
+                    >
+                      Change
+                    </button>
+                  </div>
+
+                  {/* 6-Digit Segmented Code Input */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-[#8E9BBA] text-center block">
+                      Enter 6-Digit Code
+                    </label>
+                    <div className="flex justify-center gap-2 sm:gap-3">
+                      {otpCode.map((digit, index) => (
+                        <input
+                          key={index}
+                          ref={(el) => {
+                            otpInputRefs.current[index] = el;
+                          }}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={digit}
+                          onChange={(e) => handleOtpDigitChange(index, e.target.value)}
+                          onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                          className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl font-bold font-mono rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white focus:border-[#30D158] focus:ring-2 focus:ring-[#30D158]/20 focus:outline-none transition-all"
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading || otpCode.join('').length !== 6}
+                    className="w-full py-3 rounded-2xl bg-[#30D158] hover:bg-[#28B84D] disabled:opacity-50 text-[#0B0E14] font-bold text-sm transition-all shadow-[0_4px_16px_rgba(48,209,88,0.3)] flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Verifying Code...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <span>Verify Code & Sign In</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+
+                  {/* Resend Timer */}
+                  <div className="flex items-center justify-between pt-2 text-xs text-[#8E9BBA]">
+                    <span>Didn't receive the email?</span>
+                    {otpCountdown > 0 ? (
+                      <span className="text-[#6E7787] font-mono flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Resend in {otpCountdown}s</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={isLoading}
+                        className="text-[#30D158] font-bold hover:underline cursor-pointer"
+                      >
+                        Resend code
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* =========================================================================
+              TAB 3: REGISTER NEW ACCOUNT
+             ========================================================================= */}
+          {authTab === 'register' && (
+            <form onSubmit={handleRegisterUser} className="space-y-4">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-white">Create an Account</h3>
+                <p className="text-xs text-[#8E9BBA]">
+                  Enter your details to register for a VaultDesk portal account.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[#8E9BBA] block">
+                  Full Name *
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
+                  <input
+                    type="text"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="Enter full name"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#00A896]"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[#8E9BBA] block">
+                  Corporate Email *
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
+                  <input
+                    type="email"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#00A896]"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#8E9BBA] block">
+                    Password *
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Min 6 characters"
+                      className="w-full pl-10 pr-10 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#00A896]"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-3 text-[#6E7787] hover:text-white"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#8E9BBA] block">
+                    Department
+                  </label>
+                  <div className="relative">
+                    <Building className="absolute left-3.5 top-3 w-4 h-4 text-[#6E7787]" />
+                    <input
+                      type="text"
+                      value={regDepartment}
+                      onChange={(e) => setRegDepartment(e.target.value)}
+                      placeholder="e.g. Operations"
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white placeholder-[#6E7787] text-sm focus:outline-none focus:border-[#00A896]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 rounded-2xl bg-[#00A896] hover:bg-[#008f81] disabled:opacity-50 text-white font-bold text-sm transition-all shadow-[0_4px_16px_rgba(0,168,150,0.3)] flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Submitting Registration...</span>
+                  </span>
+                ) : (
+                  <>
+                    <span>Submit Registration</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              <div className="pt-2 text-center text-xs text-[#8E9BBA]">
+                <span>Already have an account? </span>
+                <button
+                  type="button"
+                  onClick={() => setAuthTab('local_pwd')}
+                  className="text-[#0A84FF] font-semibold hover:underline cursor-pointer"
+                >
+                  Sign in
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Documentation & README.md Action */}
           <div className="pt-3 border-t border-[#232833]">
-            <div className="p-3 rounded-[10px] bg-[#12151C] border border-[#2E3440] flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-[#A6AEC0] min-w-0">
+            <div className="p-3 rounded-2xl bg-[#0E1017] border border-[#232833] flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-[#8E9BBA] min-w-0">
                 <FileText className="w-4 h-4 text-[#0A84FF] shrink-0" />
-                <span className="truncate">Need local setup & GitHub install docs?</span>
+                <span className="truncate">Need local setup & GitHub install guide?</span>
               </div>
               <button
                 type="button"
                 onClick={onOpenReadme}
-                className="px-2.5 py-1.5 rounded-[6px] bg-[#0A84FF]/10 hover:bg-[#0A84FF]/20 text-[#0A84FF] border border-[#0A84FF]/30 font-semibold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
-                title="View and download formatted README.md for your GitHub repository"
+                className="px-3 py-1.5 rounded-xl bg-[#0A84FF]/10 hover:bg-[#0A84FF]/20 text-[#0A84FF] border border-[#0A84FF]/30 font-semibold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+                title="View formatted README.md"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>README & Guide</span>
+                <span>README</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Security Notice Footer */}
+        {/* Footer */}
         <div className="mt-4 text-center text-xs text-[#6E7787]">
-          <span>Protected by VaultDesk Role-Based Access Control (RBAC) & TLS Encrypted Session Tokens.</span>
+          Protected by VaultDesk Role-Based Access Control (RBAC) & TLS Encrypted Session Tokens.
         </div>
       </div>
+
+      {/* Gmail SMTP App Password Modal */}
+      {showSmtpModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#121621] border border-[#232833] rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl relative">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2 text-white font-bold text-base">
+                <Mail className="w-5 h-5 text-[#0A84FF]" />
+                <span>Configure Gmail Dispatch</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSmtpModal(false)}
+                className="text-[#6E7787] hover:text-white p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-[#8E9BBA] leading-relaxed">
+              Enter your Gmail address and a 16-character Google App Password (<span className="text-[#0A84FF]">myaccount.google.com/apppasswords</span>) for 24/7 background delivery to <strong className="text-white">1393ndsd@gmail.com</strong> without needing active browser OAuth sessions.
+            </p>
+
+            <form onSubmit={handleSaveSmtp} className="space-y-3 pt-2">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-[#8E9BBA]">Gmail Address</label>
+                <input
+                  type="email"
+                  value={smtpUser}
+                  onChange={(e) => setSmtpUser(e.target.value)}
+                  placeholder="1393ndsd@gmail.com"
+                  className="w-full px-3.5 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white text-xs focus:outline-none focus:border-[#0A84FF]"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-[#8E9BBA]">16-Digit Google App Password</label>
+                <input
+                  type="password"
+                  value={smtpPass}
+                  onChange={(e) => setSmtpPass(e.target.value)}
+                  placeholder="xxxx xxxx xxxx xxxx"
+                  className="w-full px-3.5 py-2.5 rounded-2xl bg-[#0E1017] border border-[#2E3440] text-white text-xs focus:outline-none focus:border-[#0A84FF]"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowSmtpModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-[#8E9BBA] hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#0A84FF] hover:bg-[#0070E0] text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                >
+                  Save & Activate Gmail
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -13,7 +13,9 @@ import { PsmConnectorStudio } from './components/PsmConnectorStudio';
 import { LocalKnowledgeBase } from './components/LocalKnowledgeBase';
 import { LoginView } from './components/LoginView';
 import { UserManagement } from './components/UserManagement';
+import { ComplianceView } from './components/ComplianceView';
 import { ReadmeModal } from './components/ReadmeModal';
+import { testFirebaseConnection } from './firebase';
 import {
   ErrorEntry,
   UpdateRelease,
@@ -45,25 +47,9 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('troubleshooting');
 
-  // Authentication & Current User Session
-  const [authToken, setAuthToken] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem('vaultdesk_token') || 'session-admin';
-    } catch {
-      return 'session-admin';
-    }
-  });
-
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    try {
-      const saved = localStorage.getItem('vaultdesk_user');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // fallback
-    }
-    return null;
-  });
-
+  // Authentication & Current User Session - Always asks for login on website access
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
   const [errors, setErrors] = useState<ErrorEntry[]>(INITIAL_ERRORS);
@@ -170,6 +156,7 @@ export default function App() {
 
   // Fetch initial data from API with graceful fallbacks
   useEffect(() => {
+    testFirebaseConnection();
     const fetchData = async () => {
       try {
         const healthRes = await fetch('/api/health');
@@ -517,26 +504,37 @@ export default function App() {
     }
   };
 
-  // Verify authenticated session
+  // Verify authenticated session (requires login whenever accessing website)
   useEffect(() => {
+    // Purge any persistent demo credentials from localStorage
+    try {
+      localStorage.removeItem('vaultdesk_token');
+      localStorage.removeItem('vaultdesk_user');
+    } catch {
+      // ignore
+    }
+
     const verifySession = async () => {
-      if (!authToken) {
+      // Check active tab session storage only
+      const savedToken = sessionStorage.getItem('vaultdesk_token');
+      if (!savedToken) {
         setIsAuthLoading(false);
         return;
       }
       try {
         const res = await fetch('/api/auth/me', {
-          headers: { Authorization: `Bearer ${authToken}` },
+          headers: { Authorization: `Bearer ${savedToken}` },
         });
         if (res.ok) {
           const userData = await res.json();
           setCurrentUser(userData);
-          localStorage.setItem('vaultdesk_user', JSON.stringify(userData));
+          setAuthToken(savedToken);
+          sessionStorage.setItem('vaultdesk_user', JSON.stringify(userData));
         } else {
           setCurrentUser(null);
           setAuthToken(null);
-          localStorage.removeItem('vaultdesk_token');
-          localStorage.removeItem('vaultdesk_user');
+          sessionStorage.removeItem('vaultdesk_token');
+          sessionStorage.removeItem('vaultdesk_user');
         }
       } catch (err) {
         console.warn('Session verification fallback:', err);
@@ -546,13 +544,14 @@ export default function App() {
     };
 
     verifySession();
-  }, [authToken]);
+  }, []);
 
   const handleLoginSuccess = (user: UserProfile, token: string) => {
     setCurrentUser(user);
     setAuthToken(token);
-    localStorage.setItem('vaultdesk_user', JSON.stringify(user));
-    localStorage.setItem('vaultdesk_token', token);
+    setActiveTab('troubleshooting');
+    sessionStorage.setItem('vaultdesk_user', JSON.stringify(user));
+    sessionStorage.setItem('vaultdesk_token', token);
   };
 
   const handleLogout = async () => {
@@ -566,23 +565,13 @@ export default function App() {
     }
     setCurrentUser(null);
     setAuthToken(null);
-    localStorage.removeItem('vaultdesk_user');
-    localStorage.removeItem('vaultdesk_token');
-  };
-
-  const handleSwitchDemoUser = async (email: string) => {
+    sessionStorage.removeItem('vaultdesk_user');
+    sessionStorage.removeItem('vaultdesk_token');
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, authMethod: 'local' }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        handleLoginSuccess(data.user, data.token);
-      }
-    } catch (err) {
-      console.warn('Demo switch fallback:', err);
+      localStorage.removeItem('vaultdesk_user');
+      localStorage.removeItem('vaultdesk_token');
+    } catch {
+      // ignore
     }
   };
 
@@ -624,6 +613,7 @@ export default function App() {
           setIsMobileSidebarOpen(false);
         }}
         advisoryCount={apiStatus.advisoryCount}
+        currentUser={currentUser}
         onOpenReadme={() => setIsReadmeModalOpen(true)}
         className="hidden md:flex"
       />
@@ -642,6 +632,7 @@ export default function App() {
               setIsMobileSidebarOpen(false);
             }}
             advisoryCount={apiStatus.advisoryCount}
+            currentUser={currentUser}
             onOpenReadme={() => setIsReadmeModalOpen(true)}
             className="relative z-10 w-72 h-full shadow-2xl"
           />
@@ -664,7 +655,6 @@ export default function App() {
           apiStatus={apiStatus}
           currentUser={currentUser}
           onLogout={handleLogout}
-          onSwitchDemoUser={handleSwitchDemoUser}
           onOpenReadme={() => setIsReadmeModalOpen(true)}
           currentTheme={themeMode}
           onThemeChange={handleThemeChange}
@@ -675,6 +665,10 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="flex-1 px-4 sm:px-8 py-6 max-w-[1600px] w-full mx-auto space-y-6">
+        {activeTab === 'compliance' && (
+          <ComplianceView currentUser={currentUser} />
+        )}
+
         {activeTab === 'troubleshooting' && (
           <TroubleshootingDashboard
             errors={errors}
@@ -739,7 +733,12 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'users' && currentUser && (
+        {activeTab === 'users' &&
+          currentUser &&
+          (currentUser.role === 'superadmin' ||
+            currentUser.role === 'admin' ||
+            currentUser.permissions?.includes('users:read') ||
+            currentUser.permissions?.includes('users:manage')) && (
           <UserManagement
             currentUser={currentUser}
             onUserUpdated={(updated) => {
