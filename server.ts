@@ -147,6 +147,17 @@ function safeError(message: string, ...args: any[]) {
 const activeEmailOtps = new Map<string, { code: string; expiresAt: number; attempts: number }>();
 
 // Gmail API RFC 2822 Base64URL encoder
+// HTML Sanitizer to prevent Reflected Cross-Site Scripting (CWE-79 / js/reflected-xss)
+function escapeHtml(str: unknown): string {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function buildRfc2822Message(to: string, from: string, subject: string, textBody: string, htmlBody?: string) {
   const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
   const messageParts = [
@@ -160,11 +171,8 @@ function buildRfc2822Message(to: string, from: string, subject: string, textBody
     htmlBody || textBody.replace(/\n/g, '<br/>'),
   ];
   const message = messageParts.join('\r\n');
-  return Buffer.from(message)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  // Use native Node.js base64url encoding to eliminate polynomial regular expressions (CWE-1333 / js/polynomial-redos)
+  return Buffer.from(message).toString('base64url');
 }
 
 async function sendGmailMessage(accessToken: string, to: string, subject: string, textBody: string, htmlBody?: string) {
@@ -182,7 +190,7 @@ async function sendGmailMessage(accessToken: string, to: string, subject: string
     throw new Error(`Gmail API error (${response.status}): ${errorData}`);
   }
   const result = await response.json();
-  console.log(`[Gmail API] Successfully dispatched email via Gmail API to ${to}. Message ID: ${result.id}`);
+  console.log('[Gmail API] Successfully dispatched email via Gmail API.');
   return result;
 }
 
@@ -267,14 +275,14 @@ async function sendOutboundEmail(to: string, subject: string, textBody: string, 
         text: textBody,
         html: htmlBody || textBody.replace(/\n/g, '<br/>'),
       });
-      console.log(`[Nodemailer/SMTP] Dispatched email to ${to}. Message ID: ${info.messageId}`);
+      console.log('[Nodemailer/SMTP] Dispatched email successfully.');
       const previewUrl = nodemailer.getTestMessageUrl(info);
       if (previewUrl) {
-        console.log(`[Nodemailer] View Email Preview Online: ${previewUrl}`);
+        console.log('[Nodemailer] View Email Preview Online:', previewUrl);
       }
     }
   } catch (err) {
-    console.error(`[Nodemailer/SMTP] Failed to dispatch email to ${to}:`, err);
+    console.error('[Nodemailer/SMTP] Failed to dispatch email:', err);
   }
 }
 
@@ -1328,9 +1336,10 @@ app.get('/api/users/action', (req, res) => {
     user.approvedAt = new Date().toISOString();
     user.approvedBy = ADMIN_EMAIL;
 
-    console.log(`[ONE-CLICK EMAIL ACTION] Approved user ${user.name} (${user.email}) via direct email link.`);
+    console.log('[ONE-CLICK EMAIL ACTION] Approved user registration via email token.');
 
     res.setHeader('Content-Type', 'text/html');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     return res.send(`
       <!DOCTYPE html>
       <html lang="en">
@@ -1356,8 +1365,8 @@ app.get('/api/users/action', (req, res) => {
           <h1>User Approved Successfully</h1>
           <p>You have approved user access directly via email. The account is now active and can sign into the console.</p>
           <div class="user-badge">
-            <div class="user-name">${user.name}</div>
-            <div class="user-email">${user.email}</div>
+            <div class="user-name">${escapeHtml(user.name)}</div>
+            <div class="user-email">${escapeHtml(user.email)}</div>
           </div>
           <a href="/" class="btn">Return to VaultDesk</a>
         </div>
@@ -1367,9 +1376,10 @@ app.get('/api/users/action', (req, res) => {
   } else if (action === 'reject') {
     user.status = 'rejected';
 
-    console.log(`[ONE-CLICK EMAIL ACTION] Rejected registration for ${user.name} (${user.email}) via direct email link.`);
+    console.log('[ONE-CLICK EMAIL ACTION] Rejected registration via email token.');
 
     res.setHeader('Content-Type', 'text/html');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     return res.send(`
       <!DOCTYPE html>
       <html lang="en">
@@ -1394,8 +1404,8 @@ app.get('/api/users/action', (req, res) => {
           <h1>Registration Rejected</h1>
           <p>Registration request for this user was rejected. Access remains restricted.</p>
           <div class="user-badge">
-            <div class="user-name">${user.name}</div>
-            <div class="user-email">${user.email}</div>
+            <div class="user-name">${escapeHtml(user.name)}</div>
+            <div class="user-email">${escapeHtml(user.email)}</div>
           </div>
           <a href="/" class="btn">Return to VaultDesk</a>
         </div>
