@@ -115,16 +115,6 @@ VaultDesk bridges these operational gaps with an all-in-one, security-hardened p
 * **Diagnostic CPM Error Runbooks & Multi-Format Exports**: Automated runbook synthesis for codes such as `CACPM406E`, `CACPM250E`, and `CACPM072E` featuring root cause analysis, CLI/PVWA playbooks, and Knowledge Base links. Downloadable as Word (`.DOC`), PDF (`.PDF`), and Plaintext (`.TXT`).
 * **Non-Compliant Account CSV Export**: One-click download of filtered non-compliant account directory data in clean `.CSV` format.
 
-### 9. ✉️ Multi-Recipient Executive Compliance Reporting & Custom SMTP
-* **Multi-Recipient Email Dispatch**: Send compliance audit reports to multiple comma-separated email addresses simultaneously.
-* **Custom Executive Cover Notes**: Include custom notes and cover messages directly in the email body.
-* **Multi-Format Attachment Options**: Choose between Executive PDF or Word Document (`.DOCX`) report formats.
-* **Dedicated SMTP Settings Page**: Configure Google Gmail OAuth API or 16-character Gmail App Passwords (`smtp.gmail.com:465`) within Settings for 24/7 background delivery.
-
-### 10. 🚨 Disaster Recovery Breakglass Emergency Superadmin
-* **Discrete Emergency Account**: Built-in breakglass local account (`breakglass` / `breakglass@vaultdesk.internal`, password `Breakglass#2026!`) with full `superadmin` privileges (`ALL_PERMISSIONS`) for emergency disaster recovery.
-* **Security Hardening**: Credentials and login options for the breakglass user remain hidden from public login interfaces to preserve operational security.
-
 ---
 
 ## Architecture Overview
